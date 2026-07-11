@@ -1,0 +1,84 @@
+"""Registro de ferramentas expostas ao Gemini via function calling."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..config import Config
+
+MAX_OUTPUT = 6000
+
+
+def truncate(text: str, limit: int = MAX_OUTPUT) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n… (saída cortada em {limit} caracteres)"
+
+
+@dataclass
+class ToolContext:
+    """Dependências que as ferramentas recebem da interface ativa."""
+
+    config: "Config"
+    # Pergunta ao usuário antes de ações perigosas; retorna True se autorizado.
+    confirm: Callable[[str], Awaitable[bool]]
+
+
+@dataclass
+class Tool:
+    declaration: dict[str, Any]
+    handler: Callable[..., Awaitable[str]]  # async (ctx, **args) -> str
+
+
+def build_tools(config: "Config") -> dict[str, Tool]:
+    """Monta as ferramentas disponíveis conforme a configuração."""
+    from . import home, remote, shell, web
+    from .. import memory
+
+    tools: dict[str, Tool] = {}
+
+    def add(tool: Tool):
+        tools[tool.declaration["name"]] = tool
+
+    add(shell.TOOL)
+    add(web.SEARCH_TOOL)
+    add(web.FETCH_TOOL)
+    add(
+        Tool(
+            declaration={
+                "name": "remember",
+                "description": (
+                    "Guarda um fato permanentemente na memória (preferências do chefe, "
+                    "informações importantes, lembretes de longo prazo)."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "fact": {"type": "STRING", "description": "O fato a memorizar, em uma frase."}
+                    },
+                    "required": ["fact"],
+                },
+            },
+            handler=lambda ctx, fact: _async_value(memory.remember(fact)),
+        )
+    )
+
+    if config.machines:
+        add(remote.RUN_ON_TOOL)
+        if any(m.mac_address for m in config.machines.values()):
+            add(remote.WAKE_TOOL)
+
+    if config.ha_token:
+        add(home.DEVICES_TOOL)
+        add(home.CONTROL_TOOL)
+        add(home.ANNOUNCE_TOOL)
+
+    return tools
+
+
+async def _async_value(value: str) -> str:
+    return value

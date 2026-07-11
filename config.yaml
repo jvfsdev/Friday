@@ -1,0 +1,25 @@
+# Configuração da Friday
+
+model: gemini-2.5-flash        # modelo Gemini (nível gratuito)
+timezone: America/Sao_Paulo
+history_max_turns: 40          # janela de contexto da conversa
+
+# Máquinas que a Friday pode controlar por SSH.
+# Requer chave SSH do servidor autorizada em cada máquina (guia no README).
+machines:
+  # mac:
+  #   host: 192.168.0.10
+  #   user: jvfs
+  # pc:
+  #   host: 192.168.0.11
+  #   user: jvfs
+  #   mac_address: "AA:BB:CC:DD:EE:FF"   # para Wake-on-LAN ("liga meu PC")
+
+# Rotinas proativas: cron → instrução. O resultado chega no Telegram.
+routines:
+  resumo-matinal:
+    cron: "0 8 * * *"
+    prompt: >
+      Faça meu resumo matinal: previsão do tempo para hoje na minha cidade,
+      as 3 principais manchetes do Brasil e do mundo, e qualquer lembrete
+      que você tenha anotado na memória para hoje. Seja concisa.

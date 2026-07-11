@@ -1,0 +1,106 @@
+"""Ponto de entrada: `python -m friday` (Telegram) ou `python -m friday --cli`."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import sys
+
+from .brain import Brain
+from .config import load_config
+from .scheduler import FridayScheduler
+from .tools import ToolContext, build_tools
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+async def run_cli(config):
+    from rich.console import Console
+    from rich.markdown import Markdown
+
+    console = Console()
+
+    async def confirm(description: str) -> bool:
+        console.print(f"\n[bold yellow]⚠️  Confirmação necessária:[/] {description}")
+        answer = await asyncio.to_thread(input, "Confirmar? [s/N] ")
+        return answer.strip().lower() in ("s", "sim", "y", "yes")
+
+    ctx = ToolContext(config=config, confirm=confirm)
+    tools = build_tools(config)
+    brain = Brain(config, tools, ctx)
+
+    async def send(text: str):
+        console.print(Markdown(text))
+
+    scheduler = FridayScheduler(config, brain, send)
+    tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
+    scheduler.start()
+
+    console.print("[bold cyan]Friday[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
+    while True:
+        try:
+            user = (await asyncio.to_thread(input, "você> ")).strip()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if not user:
+            continue
+        if user.lower() in ("sair", "exit", "quit"):
+            break
+        if user == "/reset":
+            brain.reset()
+            console.print("[dim]conversa zerada[/]")
+            continue
+        with console.status("[cyan]pensando…[/]"):
+            answer = await brain.ask(user)
+        console.print(Markdown(answer))
+        console.print()
+
+
+async def run_telegram(config):
+    from .telegram_bot import TelegramInterface
+
+    interface = TelegramInterface(config)
+    ctx = ToolContext(config=config, confirm=interface.confirm)
+    tools = build_tools(config)
+    brain = Brain(config, tools, ctx)
+    interface.brain = brain
+
+    scheduler = FridayScheduler(config, brain, interface.send)
+    tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
+    scheduler.start()
+
+    await interface.run_forever()
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="friday")
+    parser.add_argument("--cli", action="store_true", help="chat no terminal (modo de teste)")
+    args = parser.parse_args()
+
+    config = load_config()
+    if not config.gemini_api_key:
+        sys.exit(
+            "GEMINI_API_KEY não configurada.\n"
+            "Crie sua chave gratuita em https://aistudio.google.com/apikey ,\n"
+            "copie .env.example para .env e preencha."
+        )
+    if not args.cli and (not config.telegram_bot_token or not config.telegram_user_id):
+        sys.exit(
+            "TELEGRAM_BOT_TOKEN/TELEGRAM_USER_ID não configurados no .env.\n"
+            "Crie o bot com o @BotFather e descubra seu ID com o @userinfobot,\n"
+            "ou rode em modo terminal: python -m friday --cli"
+        )
+
+    try:
+        asyncio.run(run_cli(config) if args.cli else run_telegram(config))
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,22 @@
+# Unidade systemd para rodar a Friday 24/7 no servidor.
+# Instalação (no servidor Linux):
+#   sudo cp deploy/friday.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now friday
+# Ajuste User e os caminhos abaixo para o seu usuário/pasta.
+
+[Unit]
+Description=Friday - assistente pessoal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jvfs
+WorkingDirectory=/home/jvfs/Friday
+ExecStart=/home/jvfs/Friday/.venv/bin/python -m friday
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
