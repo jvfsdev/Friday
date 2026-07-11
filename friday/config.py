@@ -36,6 +36,7 @@ class Config:
     telegram_user_id: int | None
     ha_url: str
     ha_token: str
+    notion_token: str
     model: str = "gemini-2.5-flash"
     timezone: str = "America/Sao_Paulo"
     history_max_turns: int = 40
@@ -67,6 +68,7 @@ def load_config() -> Config:
         telegram_user_id=int(user_id) if user_id else None,
         ha_url=os.getenv("HA_URL", "http://localhost:8123").strip().rstrip("/"),
         ha_token=os.getenv("HA_TOKEN", "").strip(),
+        notion_token=os.getenv("NOTION_TOKEN", "").strip(),
         model=raw.get("model", "gemini-2.5-flash"),
         timezone=raw.get("timezone", "America/Sao_Paulo"),
         history_max_turns=int(raw.get("history_max_turns", 40)),

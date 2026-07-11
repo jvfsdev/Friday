@@ -13,7 +13,9 @@ friday.egg-info/dependency_links.txt
 friday.egg-info/requires.txt
 friday.egg-info/top_level.txt
 friday/tools/__init__.py
+friday/tools/google_workspace.py
 friday/tools/home.py
+friday/tools/notion.py
 friday/tools/remote.py
 friday/tools/shell.py
 friday/tools/web.py

@@ -32,39 +32,11 @@ cp .env.example .env   # e preencha (ver abaixo)
 .venv/bin/python -m friday          # modo bot do Telegram
 ```
 
-## Deploy no servidor Linux
+## Deploy no servidor e demais integrações
 
-```bash
-git clone <este repo> ~/Friday && cd ~/Friday
-python3 -m venv .venv && .venv/bin/pip install -e .
-cp .env.example .env && nano .env
-sudo cp deploy/friday.service /etc/systemd/system/   # ajuste User/caminhos no arquivo
-sudo systemctl daemon-reload
-sudo systemctl enable --now friday
-journalctl -u friday -f   # acompanhar os logs
-```
-
-## Controlar o Mac e o PC (SSH)
-
-No **servidor**, gere uma chave: `ssh-keygen -t ed25519` (sem senha).
-
-- **Mac**: Ajustes → Geral → Compartilhamento → **Sessão Remota** (ligar). Depois, do servidor: `ssh-copy-id usuario@ip-do-mac`.
-- **Windows**: Configurações → Sistema → Recursos Opcionais → adicionar **Servidor OpenSSH**; inicie o serviço `sshd` (e deixe automático). Copie a chave pública do servidor para `C:\Users\voce\.ssh\authorized_keys` (para conta admin: `C:\ProgramData\ssh\administrators_authorized_keys`).
-- Descomente e preencha o bloco `machines:` no `config.yaml`. Para Wake-on-LAN, ative "Wake on LAN/Magic Packet" na BIOS e no driver de rede do PC e preencha `mac_address`.
-
-## Casa inteligente (Home Assistant)
-
-No servidor (requer Docker):
-
-```bash
-docker run -d --name homeassistant --restart=unless-stopped \
-  --network=host -e TZ=America/Sao_Paulo \
-  -v ~/homeassistant:/config ghcr.io/home-assistant/home-assistant:stable
-```
-
-1. Abra `http://ip-do-servidor:8123`, crie a conta e adicione seus dispositivos (Tuya/SmartLife etc. são detectados ou adicionados por integração).
-2. Para os Echo/Alexa: instale o **HACS** e a integração **Alexa Media Player** (dá voz à Friday pelos Echo).
-3. No HA: Perfil → Segurança → **Tokens de acesso de longa duração** → crie um e cole em `HA_TOKEN` no `.env` (e ajuste `HA_URL` se preciso).
+O passo a passo completo — servidor com systemd, SSH para Mac/PC,
+Wake-on-LAN, Gmail/Agenda (Google), Notion e Home Assistant/Alexa —
+está no **[DEPLOY.md](DEPLOY.md)**.
 
 ## Rotinas e lembretes
 

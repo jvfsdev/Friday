@@ -21,5 +21,7 @@ routines:
     cron: "0 8 * * *"
     prompt: >
       Faça meu resumo matinal: previsão do tempo para hoje na minha cidade,
-      as 3 principais manchetes do Brasil e do mundo, e qualquer lembrete
-      que você tenha anotado na memória para hoje. Seja concisa.
+      as 3 principais manchetes do Brasil e do mundo, meus compromissos de
+      hoje na agenda e emails não lidos importantes (se você tiver essas
+      ferramentas disponíveis), e qualquer lembrete que você tenha anotado
+      na memória para hoje. Seja concisa.
