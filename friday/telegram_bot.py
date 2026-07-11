@@ -35,6 +35,9 @@ class TelegramInterface:
             Application.builder()
             .token(config.telegram_bot_token)
             .job_queue(None)  # usamos nosso próprio scheduler (FridayScheduler)
+            # Sem isso os updates são processados em fila e o clique em
+            # Confirmar/Cancelar fica preso atrás da própria espera pela confirmação.
+            .concurrent_updates(True)
             .connect_timeout(30)
             .read_timeout(30)
             .write_timeout(30)
