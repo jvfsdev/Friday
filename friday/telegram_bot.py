@@ -8,6 +8,7 @@ import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -30,7 +31,15 @@ class TelegramInterface:
     def __init__(self, config: Config):
         self.config = config
         self.brain: Brain | None = None  # injetado depois (dependência circular com confirm)
-        self.app = Application.builder().token(config.telegram_bot_token).build()
+        self.app = (
+            Application.builder()
+            .token(config.telegram_bot_token)
+            .job_queue(None)  # usamos nosso próprio scheduler (FridayScheduler)
+            .connect_timeout(30)
+            .read_timeout(30)
+            .write_timeout(30)
+            .build()
+        )
         self._pending: dict[str, asyncio.Future[bool]] = {}
 
         owner = filters.User(user_id=config.telegram_user_id)
@@ -111,7 +120,16 @@ class TelegramInterface:
     # ---- ciclo de vida (compartilha o event loop com o scheduler) ----
 
     async def run_forever(self):
-        await self.app.initialize()
+        # Rede pode estar lenta/instável na subida (ex.: servidor acabou de ligar).
+        for attempt in range(5):
+            try:
+                await self.app.initialize()
+                break
+            except TelegramError as exc:
+                if attempt == 4:
+                    raise
+                log.warning("falha ao conectar no Telegram (%s), tentando de novo em 15s", exc)
+                await asyncio.sleep(15)
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
         log.info("bot do Telegram no ar")
