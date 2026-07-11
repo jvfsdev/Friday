@@ -122,6 +122,18 @@ A Microsoft aposentou o acesso por senha em 2024, então usa-se a API oficial
    servidor, sem navegador local.
 5. Reinicie a Friday. ("tenho email novo?" passa a olhar Gmail E Hotmail.)
 
+**Erro "does not exist in tenant 'Microsoft Services'" ao entrar no portal?**
+Contas pessoais sem diretório Azure próprio caem num tenant restrito da
+Microsoft. Nessa ordem:
+1. Tente numa **janela anônima** (descarta sessão/tenant antigo em cache).
+2. O registro do app pode ser feito por **qualquer** conta Microsoft que
+   consiga entrar no portal — não precisa ser a conta do email! Registre com
+   outra conta sua; o login da conta @hotmail acontece só no passo 4
+   (devicelogin), que não passa pelo portal.
+3. Sem nenhuma conta que entre: crie uma conta Azure gratuita com a @hotmail
+   em azure.microsoft.com/free (pede cartão para verificação, sem cobrança) —
+   isso cria o diretório próprio e o portal passa a abrir.
+
 ## 7. Notion
 
 1. Em [notion.so/my-integrations](https://www.notion.so/my-integrations):
