@@ -30,6 +30,14 @@ class Routine:
 
 
 @dataclass
+class MonitorSpec:
+    name: str
+    check: str            # disk | command | ping
+    interval_minutes: int
+    params: dict
+
+
+@dataclass
 class Config:
     gemini_api_key: str
     telegram_bot_token: str
@@ -39,10 +47,12 @@ class Config:
     notion_token: str
     ms_client_id: str
     model: str = "gemini-2.5-flash"
+    fallback_model: str = "gemini-2.5-flash-lite"
     timezone: str = "America/Sao_Paulo"
     history_max_turns: int = 40
     machines: dict[str, Machine] = field(default_factory=dict)
     routines: list[Routine] = field(default_factory=list)
+    monitors: list[MonitorSpec] = field(default_factory=list)
 
 
 def load_config() -> Config:
@@ -61,6 +71,15 @@ def load_config() -> Config:
         Routine(name=name, cron=spec["cron"], prompt=spec["prompt"].strip())
         for name, spec in (raw.get("routines") or {}).items()
     ]
+    monitors = [
+        MonitorSpec(
+            name=name,
+            check=spec["check"],
+            interval_minutes=int(spec.get("interval_minutes", 15)),
+            params={k: v for k, v in spec.items() if k not in ("check", "interval_minutes")},
+        )
+        for name, spec in (raw.get("monitors") or {}).items()
+    ]
 
     user_id = os.getenv("TELEGRAM_USER_ID", "").strip()
     return Config(
@@ -72,8 +91,10 @@ def load_config() -> Config:
         notion_token=os.getenv("NOTION_TOKEN", "").strip(),
         ms_client_id=os.getenv("MS_CLIENT_ID", "").strip(),
         model=raw.get("model", "gemini-2.5-flash"),
+        fallback_model=raw.get("fallback_model", "gemini-2.5-flash-lite"),
         timezone=raw.get("timezone", "America/Sao_Paulo"),
         history_max_turns=int(raw.get("history_max_turns", 40)),
         machines=machines,
         routines=routines,
+        monitors=monitors,
     )

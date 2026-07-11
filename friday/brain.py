@@ -50,11 +50,13 @@ class Brain:
             f"# Memória\n{memory.load_memory()}"
         )
 
-    async def ask(self, user_text: str) -> str:
+    async def ask(self, user_text: str, media: list[tuple[bytes, str]] | None = None) -> str:
+        """Pergunta à Friday. `media`: pares (bytes, mime_type) — áudio, imagem etc."""
+        parts = [types.Part(text=user_text)]
+        for data, mime_type in media or []:
+            parts.append(types.Part.from_bytes(data=bytes(data), mime_type=mime_type))
         async with self._lock:
-            self.history.append(
-                types.Content(role="user", parts=[types.Part(text=user_text)])
-            )
+            self.history.append(types.Content(role="user", parts=parts))
             try:
                 answer = await self._run_loop()
             except errors.APIError as exc:
@@ -98,16 +100,31 @@ class Brain:
         return "Rodei ferramentas demais numa tarefa só e parei por segurança. Reformula o pedido?"
 
     async def _generate(self, gen_config: types.GenerateContentConfig):
+        try:
+            return await self._generate_with(self.config.model, gen_config)
+        except errors.APIError as exc:
+            # Cota esgotada e há um modelo reserva? Degrada em vez de parar.
+            if exc.code == 429 and self.config.fallback_model:
+                log.warning(
+                    "cota do %s esgotada — usando o reserva %s",
+                    self.config.model, self.config.fallback_model,
+                )
+                return await self._generate_with(self.config.fallback_model, gen_config)
+            raise
+
+    async def _generate_with(self, model: str, gen_config: types.GenerateContentConfig):
         delay = 10
         for attempt in range(MAX_RETRIES):
             try:
                 return await self.client.aio.models.generate_content(
-                    model=self.config.model,
+                    model=model,
                     contents=self.history,
                     config=gen_config,
                 )
             except errors.APIError as exc:
-                retriable = exc.code in (429, 500, 503)
+                # Cota DIÁRIA estourada: esperar segundos não resolve.
+                daily = exc.code == 429 and "PerDay" in str(exc)
+                retriable = exc.code in (429, 500, 503) and not daily
                 if not retriable or attempt == MAX_RETRIES - 1:
                     raise
                 log.warning("Gemini %s — tentando de novo em %ss", exc.code, delay)

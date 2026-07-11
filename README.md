@@ -6,6 +6,8 @@ Assistente pessoal autônoma auto-hospedada, inspirada na FRIDAY do Homem de Fer
 - **Interface**: bot no Telegram (só responde ao dono) + modo `--cli` para testes
 - **Mora em**: um servidor Linux, como serviço systemd 24/7
 - **Faz**: comandos no servidor, controla outras máquinas via SSH (e liga por Wake-on-LAN), pesquisa na web, memória persistente, rotinas proativas e lembretes, casa inteligente via Home Assistant, emails e agenda (várias contas Google e @hotmail/@outlook) e Notion
+- **Entende voz e imagem**: mande mensagem de voz ou foto no Telegram que ela ouve/vê e responde
+- **Vigia e se cuida**: monitores de eventos (disco, serviços, máquinas on/offline — só avisa quando o estado muda) e autoatualização ("Friday, atualiza você mesma")
 
 ## Instalação (no Mac para testar, ou direto no servidor)
 

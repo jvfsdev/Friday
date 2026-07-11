@@ -9,6 +9,7 @@ import sys
 
 from .brain import Brain
 from .config import load_config
+from .monitor import FridayMonitor
 from .scheduler import FridayScheduler
 from .tools import ToolContext, build_tools
 
@@ -30,16 +31,17 @@ async def run_cli(config):
         answer = await asyncio.to_thread(input, "Confirmar? [s/N] ")
         return answer.strip().lower() in ("s", "sim", "y", "yes")
 
-    ctx = ToolContext(config=config, confirm=confirm)
-    tools = build_tools(config)
-    brain = Brain(config, tools, ctx)
-
     async def send(text: str):
         console.print(Markdown(text))
+
+    ctx = ToolContext(config=config, confirm=confirm, send=send)
+    tools = build_tools(config)
+    brain = Brain(config, tools, ctx)
 
     scheduler = FridayScheduler(config, brain, send)
     tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
     scheduler.start()
+    FridayMonitor(config, brain, send, scheduler.scheduler).start()
 
     console.print("[bold cyan]Friday[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
     while True:
@@ -65,7 +67,7 @@ async def run_telegram(config):
     from .telegram_bot import TelegramInterface
 
     interface = TelegramInterface(config)
-    ctx = ToolContext(config=config, confirm=interface.confirm)
+    ctx = ToolContext(config=config, confirm=interface.confirm, send=interface.send)
     tools = build_tools(config)
     brain = Brain(config, tools, ctx)
     interface.brain = brain
@@ -73,6 +75,7 @@ async def run_telegram(config):
     scheduler = FridayScheduler(config, brain, interface.send)
     tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
     scheduler.start()
+    FridayMonitor(config, brain, interface.send, scheduler.scheduler).start()
 
     await interface.run_forever()
 

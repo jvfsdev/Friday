@@ -1,6 +1,7 @@
 # Configuração da Friday
 
 model: gemini-2.5-flash        # modelo Gemini (nível gratuito)
+fallback_model: gemini-2.5-flash-lite   # reserva quando a cota diária do principal esgota
 timezone: America/Sao_Paulo
 history_max_turns: 40          # janela de contexto da conversa
 
@@ -14,6 +15,24 @@ machines:
   #   host: 192.168.0.11
   #   user: jvfs
   #   mac_address: "AA:BB:CC:DD:EE:FF"   # para Wake-on-LAN ("liga meu PC")
+
+# Monitores de eventos: checagens baratas (sem IA) em intervalos; a Friday só
+# te avisa quando o estado MUDA (ok → problema e problema → ok).
+monitors:
+  disco-cheio:
+    check: disk              # alerta quando o disco passa do limite
+    path: /
+    threshold_percent: 90
+    interval_minutes: 60
+  # servico-docker:          # alerta quando um comando falha (código != 0)
+  #   check: command
+  #   command: systemctl is-active docker
+  #   interval_minutes: 5
+  # pc-ligou:                # alerta quando uma máquina fica online/offline
+  #   check: ping
+  #   host: 192.168.0.11
+  #   alert_when: online     # ou "offline" (padrão)
+  #   interval_minutes: 5
 
 # Rotinas proativas: cron → instrução. O resultado chega no Telegram.
 routines:

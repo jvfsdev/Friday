@@ -49,6 +49,8 @@ class TelegramInterface:
         self.app.add_handler(CommandHandler("start", self._cmd_start, filters=owner))
         self.app.add_handler(CommandHandler("reset", self._cmd_reset, filters=owner))
         self.app.add_handler(MessageHandler(owner & filters.TEXT & ~filters.COMMAND, self._on_message))
+        self.app.add_handler(MessageHandler(owner & (filters.VOICE | filters.AUDIO), self._on_voice))
+        self.app.add_handler(MessageHandler(owner & filters.PHOTO, self._on_photo))
         self.app.add_handler(CallbackQueryHandler(self._on_button))
 
     # ---- envio proativo (rotinas/lembretes) ----
@@ -103,10 +105,28 @@ class TelegramInterface:
         await update.message.reply_text("Conversa zerada.")
 
     async def _on_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        await self._respond(update, update.message.text)
+
+    async def _on_voice(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        voice = update.message.voice or update.message.audio
+        file = await voice.get_file()
+        data = await file.download_as_bytearray()
+        mime = getattr(voice, "mime_type", None) or "audio/ogg"
+        text = update.message.caption or "[Mensagem de voz do chefe — ouça e atenda ao que ele pedir.]"
+        await self._respond(update, text, media=[(bytes(data), mime)])
+
+    async def _on_photo(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        photo = update.message.photo[-1]  # maior resolução disponível
+        file = await photo.get_file()
+        data = await file.download_as_bytearray()
+        text = update.message.caption or "[Foto enviada pelo chefe — analise e comente o que for útil.]"
+        await self._respond(update, text, media=[(bytes(data), "image/jpeg")])
+
+    async def _respond(self, update: Update, text: str, media=None):
         chat_id = update.effective_chat.id
         typing = asyncio.create_task(self._keep_typing(chat_id))
         try:
-            answer = await self.brain.ask(update.message.text)
+            answer = await self.brain.ask(text, media=media)
         finally:
             typing.cancel()
         for chunk in _split(answer):

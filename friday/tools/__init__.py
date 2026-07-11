@@ -26,6 +26,8 @@ class ToolContext:
     config: "Config"
     # Pergunta ao usuário antes de ações perigosas; retorna True se autorizado.
     confirm: Callable[[str], Awaitable[bool]]
+    # Envia mensagem direta ao chefe sem passar pelo modelo (avisos de sistema).
+    send: Callable[[str], Awaitable[None]] | None = None
 
 
 @dataclass
@@ -36,7 +38,7 @@ class Tool:
 
 def build_tools(config: "Config") -> dict[str, Tool]:
     """Monta as ferramentas disponíveis conforme a configuração."""
-    from . import home, remote, shell, web
+    from . import home, maintenance, remote, shell, web
     from .. import memory
 
     tools: dict[str, Tool] = {}
@@ -45,6 +47,7 @@ def build_tools(config: "Config") -> dict[str, Tool]:
         tools[tool.declaration["name"]] = tool
 
     add(shell.TOOL)
+    add(maintenance.TOOL)
     add(web.SEARCH_TOOL)
     add(web.FETCH_TOOL)
     add(

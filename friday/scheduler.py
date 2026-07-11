@@ -42,8 +42,13 @@ class FridayScheduler:
                 f"[Rotina automática '{name}' disparou agora — execute e responda ao chefe] {prompt}"
             )
             await self.send(answer)
-        except Exception:
+        except Exception as exc:
             log.exception("rotina '%s' falhou", name)
+            # Watchdog: falha silenciosa não existe — o chefe fica sabendo.
+            try:
+                await self.send(f"⚠️ A rotina '{name}' falhou: {type(exc).__name__}: {exc}")
+            except Exception:
+                log.exception("nem o aviso de falha da rotina '%s' saiu", name)
 
     def add_reminder(self, when: datetime, message: str) -> None:
         self.scheduler.add_job(

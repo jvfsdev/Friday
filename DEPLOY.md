@@ -59,6 +59,12 @@ sudo systemctl restart friday    # reiniciar (após git pull ou mudar config)
 ```
 
 Rotinas novas: edite o bloco `routines:` do `config.yaml` e reinicie.
+Monitores de eventos (disco, serviços, máquinas on/offline): bloco `monitors:`
+do `config.yaml` — exemplos comentados lá.
+
+**Autoatualização**: com um remoto git configurado (ex.: repositório no
+GitHub), basta dizer "Friday, atualiza você mesma" — ela faz git pull,
+reinstala dependências e se reinicia (o systemd a ressuscita sozinho).
 
 ## 5. Controlar o Mac e o PC (SSH + Wake-on-LAN)
 
