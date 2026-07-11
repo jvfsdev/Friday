@@ -33,14 +33,20 @@ class Brain:
         self.history.clear()
 
     def _system_prompt(self) -> str:
+        from .tools import google_workspace, outlook
+
         persona = PERSONA_FILE.read_text(encoding="utf-8")
         now = datetime.now(ZoneInfo(self.config.timezone)).strftime("%A, %d/%m/%Y %H:%M")
         machines = ", ".join(self.config.machines) or "nenhuma configurada"
+        google = ", ".join(google_workspace.accounts()) or "nenhuma"
+        microsoft = ", ".join(outlook.accounts()) or "nenhuma"
         return (
             f"{persona}\n\n"
             f"# Contexto atual\n"
             f"- Agora: {now} ({self.config.timezone})\n"
-            f"- Máquinas remotas disponíveis: {machines}\n\n"
+            f"- Máquinas remotas disponíveis: {machines}\n"
+            f"- Contas Google conectadas: {google}\n"
+            f"- Contas Microsoft/Outlook conectadas: {microsoft}\n\n"
             f"# Memória\n{memory.load_memory()}"
         )
 

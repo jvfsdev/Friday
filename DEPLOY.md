@@ -92,12 +92,35 @@ Pode ser feito **no Mac antes do deploy** (precisa de navegador):
    **App para computador** → baixe o JSON e salve como
    `state/google_credentials.json` (crie a pasta `state/` se não existir).
 4. Rode `.venv/bin/python scripts/google_auth.py` e faça login no navegador.
-5. No deploy, copie a pasta `state/` para o servidor junto com o `.env`.
+5. **Mais de uma conta Google?** Rode de novo com um nome:
+   `scripts/google_auth.py trabalho` (e adicione esse email como usuário de
+   teste no passo 2; logue com a conta certa no navegador). A Friday consulta
+   todas quando você não especificar ("tenho email novo?") e pergunta qual
+   usar quando precisar de uma só ("marca reunião...").
+6. No deploy, copie a pasta `state/` para o servidor junto com o `.env`.
 
 Nota de privacidade: com app em modo "teste" o token expira a cada 7 dias
 (basta rodar o script de novo). Para não expirar, publique o app na tela de
 consentimento (pode ficar "não verificado" — só você usa). E lembre-se: o
 conteúdo dos emails passa pela API gratuita do Gemini.
+
+## 6b. Emails @hotmail/@outlook/@live (Microsoft)
+
+A Microsoft aposentou o acesso por senha em 2024, então usa-se a API oficial
+(Graph) com um app registrado — burocracia única de ~5 minutos:
+
+1. Em [portal.azure.com](https://portal.azure.com) → **Registros de aplicativo**
+   → Novo registro. Nome: Friday; tipos de conta: **"Contas em qualquer
+   diretório organizacional e contas pessoais da Microsoft"**; redirecionamento
+   em branco.
+2. No app criado: **Autenticação** → habilite **"Permitir fluxos de cliente
+   público"** → Salvar.
+3. Copie o **ID do aplicativo (cliente)** para `MS_CLIENT_ID` no `.env`.
+4. Para cada conta: `.venv/bin/python scripts/microsoft_auth.py [nome]` —
+   o script mostra um código; entre em microsoft.com/devicelogin (de qualquer
+   aparelho, até o celular), digite o código e faça login. Funciona direto no
+   servidor, sem navegador local.
+5. Reinicie a Friday. ("tenho email novo?" passa a olhar Gmail E Hotmail.)
 
 ## 7. Notion
 
@@ -132,6 +155,7 @@ docker run -d --name homeassistant --restart=unless-stopped \
 |---|---|
 | 3 | Viver 24/7, rotinas e lembretes a qualquer hora |
 | 5 | "abre X no Mac", "roda Y no PC", "liga meu PC" |
-| 6 | "tenho email novo?", "o que tenho amanhã?", "marca dentista terça 15h" |
+| 6 | "tenho email novo?", "o que tenho amanhã?", "marca dentista terça 15h" (multi-contas Google) |
+| 6b | Emails @hotmail/@outlook também (multi-contas) |
 | 7 | "procura minhas notas de Z", "anota isso na página W" |
 | 8 | "apaga a luz da sala", "anuncia o jantar nos Echo" |

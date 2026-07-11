@@ -5,7 +5,7 @@ Assistente pessoal autônoma auto-hospedada, inspirada na FRIDAY do Homem de Fer
 - **Cérebro**: Gemini Flash (API gratuita) com function calling
 - **Interface**: bot no Telegram (só responde ao dono) + modo `--cli` para testes
 - **Mora em**: um servidor Linux, como serviço systemd 24/7
-- **Faz**: comandos no servidor, controla outras máquinas via SSH (e liga por Wake-on-LAN), pesquisa na web, memória persistente, rotinas proativas e lembretes, casa inteligente via Home Assistant
+- **Faz**: comandos no servidor, controla outras máquinas via SSH (e liga por Wake-on-LAN), pesquisa na web, memória persistente, rotinas proativas e lembretes, casa inteligente via Home Assistant, emails e agenda (várias contas Google e @hotmail/@outlook) e Notion
 
 ## Instalação (no Mac para testar, ou direto no servidor)
 

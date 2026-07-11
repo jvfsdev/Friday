@@ -77,13 +77,17 @@ def build_tools(config: "Config") -> dict[str, Tool]:
         add(home.CONTROL_TOOL)
         add(home.ANNOUNCE_TOOL)
 
-    from . import google_workspace, notion
+    from . import google_workspace, notion, outlook
 
     if google_workspace.has_credentials():
         add(google_workspace.LIST_EMAILS_TOOL)
         add(google_workspace.READ_EMAIL_TOOL)
         add(google_workspace.CALENDAR_TOOL)
         add(google_workspace.CREATE_EVENT_TOOL)
+
+    if config.ms_client_id and outlook.has_credentials():
+        add(outlook.LIST_TOOL)
+        add(outlook.READ_TOOL)
 
     if config.notion_token:
         add(notion.SEARCH_TOOL)

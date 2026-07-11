@@ -1,7 +1,8 @@
-"""Gmail e Google Calendar via APIs oficiais do Google (OAuth).
+"""Gmail e Google Calendar via APIs oficiais do Google (OAuth), multi-contas.
 
-Autenticação: rode `python scripts/google_auth.py` uma vez (no Mac, com
-navegador) para gerar state/google_token.json — veja DEPLOY.md.
+Cada conta autorizada gera um token nomeado (state/google_token_<nome>.json).
+Autorização: `python scripts/google_auth.py [nome]` numa máquina com navegador
+(padrão: "principal") — veja DEPLOY.md.
 """
 
 from __future__ import annotations
@@ -16,34 +17,60 @@ from ..config import ROOT
 
 STATE_DIR = ROOT / "state"
 CREDENTIALS_FILE = STATE_DIR / "google_credentials.json"
-TOKEN_FILE = STATE_DIR / "google_token.json"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
+def token_file(account: str):
+    return STATE_DIR / f"google_token_{account}.json"
+
+
+def accounts() -> list[str]:
+    return sorted(p.stem.removeprefix("google_token_") for p in STATE_DIR.glob("google_token_*.json"))
+
+
 def has_credentials() -> bool:
-    return TOKEN_FILE.exists()
+    return bool(accounts())
 
 
-def _service(name: str, version: str):
+def _pick(account: str) -> list[str] | str:
+    """Resolve o parâmetro `account` para uma lista de contas, ou erro legível."""
+    available = accounts()
+    if account:
+        if account in available:
+            return [account]
+        return f"Conta Google '{account}' não existe. Contas conectadas: {', '.join(available)}."
+    return available
+
+
+def _pick_one(account: str) -> str:
+    """Para ações que exigem exatamente uma conta (criar evento, ler email)."""
+    available = accounts()
+    if account:
+        return account if account in available else ""
+    return available[0] if len(available) == 1 else ""
+
+
+def _service(name: str, version: str, account: str):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+    path = token_file(account)
+    creds = Credentials.from_authorized_user_file(str(path), SCOPES)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
+        path.write_text(creds.to_json(), encoding="utf-8")
     return build(name, version, credentials=creds, cache_discovery=False)
 
 
 # ---- Gmail ----
 
 
-def _list_emails_sync(query: str, max_results: int) -> str:
-    gmail = _service("gmail", "v1")
+def _list_emails_sync(account: str, query: str, max_results: int) -> str:
+    gmail = _service("gmail", "v1", account)
     resp = gmail.users().messages().list(userId="me", q=query, maxResults=max_results).execute()
     messages = resp.get("messages", [])
     if not messages:
@@ -63,11 +90,11 @@ def _list_emails_sync(query: str, max_results: int) -> str:
             f"  assunto: {headers.get('Subject', '(sem assunto)')}\n"
             f"  resumo: {msg.get('snippet', '')[:150]}"
         )
-    return truncate("\n".join(lines))
+    return "\n".join(lines)
 
 
-def _read_email_sync(message_id: str) -> str:
-    gmail = _service("gmail", "v1")
+def _read_email_sync(account: str, message_id: str) -> str:
+    gmail = _service("gmail", "v1", account)
     msg = gmail.users().messages().get(userId="me", id=message_id, format="full").execute()
     headers = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
 
@@ -87,8 +114,8 @@ def _read_email_sync(message_id: str) -> str:
 # ---- Calendar ----
 
 
-def _calendar_events_sync(days: int, timezone: str) -> str:
-    calendar = _service("calendar", "v3")
+def _calendar_events_sync(account: str, days: int, timezone: str) -> str:
+    calendar = _service("calendar", "v3", account)
     now = datetime.now(ZoneInfo(timezone))
     resp = (
         calendar.events()
@@ -110,11 +137,11 @@ def _calendar_events_sync(days: int, timezone: str) -> str:
         start = ev["start"].get("dateTime", ev["start"].get("date", "?"))
         location = f" — {ev['location']}" if ev.get("location") else ""
         lines.append(f"{start}: {ev.get('summary', '(sem título)')}{location}")
-    return truncate("\n".join(lines))
+    return "\n".join(lines)
 
 
-def _create_event_sync(summary: str, start_iso: str, end_iso: str, timezone: str, description: str) -> str:
-    calendar = _service("calendar", "v3")
+def _create_event_sync(account: str, summary: str, start_iso: str, end_iso: str, timezone: str, description: str) -> str:
+    calendar = _service("calendar", "v3", account)
     event = {
         "summary": summary,
         "description": description,
@@ -122,42 +149,72 @@ def _create_event_sync(summary: str, start_iso: str, end_iso: str, timezone: str
         "end": {"dateTime": end_iso, "timeZone": timezone},
     }
     created = calendar.events().insert(calendarId="primary", body=event).execute()
-    return f"Compromisso criado: {summary} ({start_iso}). Link: {created.get('htmlLink', '')}"
+    return f"Compromisso criado na conta {account}: {summary} ({start_iso}). Link: {created.get('htmlLink', '')}"
 
 
-# ---- ferramentas (as libs do Google são síncronas → rodam em thread) ----
+# ---- agregação multi-contas ----
 
 
-async def _list_emails(ctx: ToolContext, query: str = "is:unread category:primary", max_results: int = 10) -> str:
-    return await asyncio.to_thread(_list_emails_sync, query, int(max_results))
+async def _for_each_account(account: str, worker) -> str:
+    names = _pick(account)
+    if isinstance(names, str):
+        return names
+    sections = []
+    for name in names:
+        try:
+            out = await asyncio.to_thread(worker, name)
+        except Exception as exc:
+            out = f"erro nesta conta: {type(exc).__name__}: {exc}"
+        sections.append(f"[conta {name}]\n{out}" if len(names) > 1 else out)
+    return truncate("\n\n".join(sections))
 
 
-async def _read_email(ctx: ToolContext, message_id: str) -> str:
-    return await asyncio.to_thread(_read_email_sync, message_id)
+NEED_ONE = "Há mais de uma conta Google conectada ({}). Diga em qual delas devo agir."
 
 
-async def _calendar_events(ctx: ToolContext, days: int = 1) -> str:
-    return await asyncio.to_thread(_calendar_events_sync, int(days), ctx.config.timezone)
+async def _list_emails(ctx: ToolContext, query: str = "is:unread category:primary", max_results: int = 10, account: str = "") -> str:
+    return await _for_each_account(account, lambda n: _list_emails_sync(n, query, int(max_results)))
 
 
-async def _create_event(ctx: ToolContext, summary: str, start_iso: str, end_iso: str, description: str = "") -> str:
+async def _read_email(ctx: ToolContext, message_id: str, account: str = "") -> str:
+    name = _pick_one(account)
+    if not name:
+        return NEED_ONE.format(", ".join(accounts()))
+    return await asyncio.to_thread(_read_email_sync, name, message_id)
+
+
+async def _calendar_events(ctx: ToolContext, days: int = 1, account: str = "") -> str:
+    return await _for_each_account(account, lambda n: _calendar_events_sync(n, int(days), ctx.config.timezone))
+
+
+async def _create_event(ctx: ToolContext, summary: str, start_iso: str, end_iso: str, description: str = "", account: str = "") -> str:
+    name = _pick_one(account)
+    if not name:
+        return NEED_ONE.format(", ".join(accounts()))
     return await asyncio.to_thread(
-        _create_event_sync, summary, start_iso, end_iso, ctx.config.timezone, description
+        _create_event_sync, name, summary, start_iso, end_iso, ctx.config.timezone, description
     )
 
+
+_ACCOUNT_PARAM = {
+    "type": "STRING",
+    "description": "Nome da conta Google (opcional; se omitido, todas nas consultas).",
+}
 
 LIST_EMAILS_TOOL = Tool(
     declaration={
         "name": "list_emails",
         "description": (
-            "Lista emails do Gmail do chefe. Por padrão, os não lidos da caixa principal. "
-            "Aceita sintaxe de busca do Gmail (ex.: 'from:fulano', 'newer_than:2d')."
+            "Lista emails do Gmail (todas as contas Google conectadas, ou uma específica). "
+            "Por padrão, os não lidos da caixa principal. Aceita sintaxe de busca do Gmail "
+            "(ex.: 'from:fulano', 'newer_than:2d')."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
                 "query": {"type": "STRING", "description": "Busca Gmail. Padrão: is:unread category:primary"},
-                "max_results": {"type": "INTEGER", "description": "Máximo de emails (padrão 10)."},
+                "max_results": {"type": "INTEGER", "description": "Máximo de emails por conta (padrão 10)."},
+                "account": _ACCOUNT_PARAM,
             },
         },
     },
@@ -167,11 +224,12 @@ LIST_EMAILS_TOOL = Tool(
 READ_EMAIL_TOOL = Tool(
     declaration={
         "name": "read_email",
-        "description": "Lê o conteúdo completo de um email pelo id retornado por list_emails.",
+        "description": "Lê o conteúdo completo de um email do Gmail pelo id retornado por list_emails.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "message_id": {"type": "STRING", "description": "Id do email."}
+                "message_id": {"type": "STRING", "description": "Id do email."},
+                "account": {"type": "STRING", "description": "Conta Google dona do email (obrigatória se houver várias)."},
             },
             "required": ["message_id"],
         },
@@ -182,11 +240,12 @@ READ_EMAIL_TOOL = Tool(
 CALENDAR_TOOL = Tool(
     declaration={
         "name": "calendar_events",
-        "description": "Lista os compromissos da agenda (Google Calendar) dos próximos dias.",
+        "description": "Lista os compromissos do Google Calendar dos próximos dias (todas as contas, ou uma).",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "days": {"type": "INTEGER", "description": "Quantos dias à frente olhar (padrão 1 = hoje)."}
+                "days": {"type": "INTEGER", "description": "Quantos dias à frente olhar (padrão 1 = hoje)."},
+                "account": _ACCOUNT_PARAM,
             },
         },
     },
@@ -197,7 +256,7 @@ CREATE_EVENT_TOOL = Tool(
     declaration={
         "name": "create_calendar_event",
         "description": (
-            "Cria um compromisso na agenda do chefe. Calcule horários absolutos "
+            "Cria um compromisso no Google Calendar do chefe. Calcule horários absolutos "
             "a partir do horário atual do contexto."
         ),
         "parameters": {
@@ -207,6 +266,7 @@ CREATE_EVENT_TOOL = Tool(
                 "start_iso": {"type": "STRING", "description": "Início, ISO: AAAA-MM-DDTHH:MM:SS"},
                 "end_iso": {"type": "STRING", "description": "Fim, ISO: AAAA-MM-DDTHH:MM:SS"},
                 "description": {"type": "STRING", "description": "Detalhes (opcional)."},
+                "account": {"type": "STRING", "description": "Conta Google onde criar (obrigatória se houver várias)."},
             },
             "required": ["summary", "start_iso", "end_iso"],
         },

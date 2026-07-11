@@ -37,6 +37,7 @@ class Config:
     ha_url: str
     ha_token: str
     notion_token: str
+    ms_client_id: str
     model: str = "gemini-2.5-flash"
     timezone: str = "America/Sao_Paulo"
     history_max_turns: int = 40
@@ -69,6 +70,7 @@ def load_config() -> Config:
         ha_url=os.getenv("HA_URL", "http://localhost:8123").strip().rstrip("/"),
         ha_token=os.getenv("HA_TOKEN", "").strip(),
         notion_token=os.getenv("NOTION_TOKEN", "").strip(),
+        ms_client_id=os.getenv("MS_CLIENT_ID", "").strip(),
         model=raw.get("model", "gemini-2.5-flash"),
         timezone=raw.get("timezone", "America/Sao_Paulo"),
         history_max_turns=int(raw.get("history_max_turns", 40)),
