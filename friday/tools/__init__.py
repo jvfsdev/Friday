@@ -28,6 +28,8 @@ class ToolContext:
     confirm: Callable[[str], Awaitable[bool]]
     # Envia mensagem direta ao chefe sem passar pelo modelo (avisos de sistema).
     send: Callable[[str], Awaitable[None]] | None = None
+    # Pool de chaves/modelos Gemini compartilhado (escada de fallback).
+    llm: Any = None
 
 
 @dataclass

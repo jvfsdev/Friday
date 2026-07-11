@@ -39,7 +39,9 @@ class MonitorSpec:
 
 @dataclass
 class Config:
-    gemini_api_key: str
+    gemini_api_key: str                       # primeira chave (compatibilidade)
+    gemini_api_keys: list[str]                # todas as chaves, em ordem
+    models: list[str]                         # escada de modelos, em ordem
     telegram_bot_token: str
     telegram_user_id: int | None
     ha_url: str
@@ -82,8 +84,24 @@ def load_config() -> Config:
     ]
 
     user_id = os.getenv("TELEGRAM_USER_ID", "").strip()
+
+    # Chaves: GEMINI_API_KEYS (lista separada por vírgula) tem precedência;
+    # senão, a GEMINI_API_KEY única de sempre.
+    multi = [k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(",") if k.strip()]
+    single = os.getenv("GEMINI_API_KEY", "").strip()
+    keys = multi or ([single] if single else [])
+
+    # Escada de modelos: lista `models:` ou os campos antigos model/fallback_model.
+    models = raw.get("models") or [
+        raw.get("model", "gemini-2.5-flash"),
+        raw.get("fallback_model", "gemini-2.5-flash-lite"),
+    ]
+    models = list(dict.fromkeys(m for m in models if m))  # dedupe mantendo a ordem
+
     return Config(
-        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_api_key=keys[0] if keys else "",
+        gemini_api_keys=keys,
+        models=models,
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_user_id=int(user_id) if user_id else None,
         ha_url=os.getenv("HA_URL", "http://localhost:8123").strip().rstrip("/"),

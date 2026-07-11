@@ -7,17 +7,16 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from google import genai
 from google.genai import errors, types
 
 from . import memory
 from .config import Config, PERSONA_FILE
+from .llm import GeminiPool
 from .tools import Tool, ToolContext
 
 log = logging.getLogger("friday.brain")
 
 MAX_TOOL_ROUNDS = 12
-MAX_RETRIES = 4
 
 
 class Brain:
@@ -25,7 +24,7 @@ class Brain:
         self.config = config
         self.tools = tools
         self.ctx = ctx
-        self.client = genai.Client(api_key=config.gemini_api_key)
+        self.llm = ctx.llm or GeminiPool(config)
         self.history: list[types.Content] = []
         self._lock = asyncio.Lock()  # uma conversa por vez (rotinas x chat)
 
@@ -64,10 +63,14 @@ class Brain:
                 self.history.pop()  # não deixa a conversa num estado quebrado
                 if exc.code == 429:
                     return (
-                        "Estourei o limite gratuito do Gemini por agora, chefe. "
-                        "Tenta de novo em um minuto."
+                        "Estourei os limites gratuitos do Gemini em todas as chaves e "
+                        "modelos por agora, chefe. Tenta de novo mais tarde."
                     )
                 return f"Deu erro na API do Gemini ({exc.code}): {exc.message}"
+            except Exception as exc:
+                log.exception("erro inesperado no cérebro")
+                self.history.pop()
+                return f"Algo deu errado do meu lado: {type(exc).__name__}: {exc}"
             self._trim_history()
             return answer
 
@@ -100,37 +103,8 @@ class Brain:
         return "Rodei ferramentas demais numa tarefa só e parei por segurança. Reformula o pedido?"
 
     async def _generate(self, gen_config: types.GenerateContentConfig):
-        try:
-            return await self._generate_with(self.config.model, gen_config)
-        except errors.APIError as exc:
-            # Cota esgotada e há um modelo reserva? Degrada em vez de parar.
-            if exc.code == 429 and self.config.fallback_model:
-                log.warning(
-                    "cota do %s esgotada — usando o reserva %s",
-                    self.config.model, self.config.fallback_model,
-                )
-                return await self._generate_with(self.config.fallback_model, gen_config)
-            raise
-
-    async def _generate_with(self, model: str, gen_config: types.GenerateContentConfig):
-        delay = 10
-        for attempt in range(MAX_RETRIES):
-            try:
-                return await self.client.aio.models.generate_content(
-                    model=model,
-                    contents=self.history,
-                    config=gen_config,
-                )
-            except errors.APIError as exc:
-                # Cota DIÁRIA estourada: esperar segundos não resolve.
-                daily = exc.code == 429 and "PerDay" in str(exc)
-                retriable = exc.code in (429, 500, 503) and not daily
-                if not retriable or attempt == MAX_RETRIES - 1:
-                    raise
-                log.warning("Gemini %s — tentando de novo em %ss", exc.code, delay)
-                await asyncio.sleep(delay)
-                delay *= 2
-        raise RuntimeError("unreachable")
+        # A escada de chaves × modelos (retries, cotas, fallback) mora no pool.
+        return await self.llm.generate(self.history, gen_config)
 
     async def _execute(self, name: str, args: dict) -> str:
         tool = self.tools.get(name)

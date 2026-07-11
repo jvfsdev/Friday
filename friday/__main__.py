@@ -34,7 +34,9 @@ async def run_cli(config):
     async def send(text: str):
         console.print(Markdown(text))
 
-    ctx = ToolContext(config=config, confirm=confirm, send=send)
+    from .llm import GeminiPool
+
+    ctx = ToolContext(config=config, confirm=confirm, send=send, llm=GeminiPool(config))
     tools = build_tools(config)
     brain = Brain(config, tools, ctx)
 
@@ -66,8 +68,12 @@ async def run_cli(config):
 async def run_telegram(config):
     from .telegram_bot import TelegramInterface
 
+    from .llm import GeminiPool
+
     interface = TelegramInterface(config)
-    ctx = ToolContext(config=config, confirm=interface.confirm, send=interface.send)
+    ctx = ToolContext(
+        config=config, confirm=interface.confirm, send=interface.send, llm=GeminiPool(config)
+    )
     tools = build_tools(config)
     brain = Brain(config, tools, ctx)
     interface.brain = brain

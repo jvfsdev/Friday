@@ -6,7 +6,6 @@ import re
 from html.parser import HTMLParser
 
 import httpx
-from google import genai
 from google.genai import types
 
 from . import Tool, ToolContext, truncate
@@ -14,15 +13,17 @@ from . import Tool, ToolContext, truncate
 
 async def _search(ctx: ToolContext, query: str) -> str:
     # O grounding com Google Search não pode ser combinado com function calling
-    # na mesma requisição, então a busca é uma chamada separada ao Gemini.
-    client = genai.Client(api_key=ctx.config.gemini_api_key)
-    response = await client.aio.models.generate_content(
-        model=ctx.config.model,
+    # na mesma requisição, então a busca é uma chamada separada ao Gemini —
+    # pela mesma escada de chaves/modelos do cérebro.
+    from ..llm import GeminiPool
+
+    llm = ctx.llm or GeminiPool(ctx.config)
+    response = await llm.generate(
         contents=(
             "Pesquise na web e responda em português, de forma factual e concisa, "
             f"citando datas quando relevante: {query}"
         ),
-        config=types.GenerateContentConfig(
+        gen_config=types.GenerateContentConfig(
             tools=[types.Tool(google_search=types.GoogleSearch())],
         ),
     )
