@@ -18,6 +18,7 @@ import logging
 import time
 import wave
 
+from . import face_state
 from .brain import Brain
 from .config import Config
 
@@ -31,17 +32,18 @@ class VoiceLoop:
     def __init__(self, config: Config, brain: Brain, on_state=None):
         self.config = config
         self.brain = brain
-        self.on_state = on_state or (lambda state: None)
+        # Por padrão publica no rosto (state/face_state.json).
+        self.on_state = on_state or face_state.publish
         s = config.voice_settings
         self.wake_threshold = float(s.get("wake_threshold", 0.5))
         self.silence_seconds = float(s.get("silence_seconds", 1.2))
         self.max_utterance = float(s.get("max_utterance_seconds", 15))
         self.input_device = s.get("input_device")  # None = padrão do sistema
 
-    def _set(self, state: str):
+    def _set(self, state: str, caption: str | None = None):
         log.info("estado de voz: %s", state)
         try:
-            self.on_state(state)
+            self.on_state(state, caption)
         except Exception:
             pass
 
@@ -84,20 +86,20 @@ class VoiceLoop:
                     continue
 
                 wake.reset()
-                self._set("listening")
+                self._set("listening", "Ouvindo…")
                 utterance = await self._record_utterance(queue, np)
                 if utterance is None:
                     self._set("idle")
                     continue
 
-                self._set("thinking")
+                self._set("thinking", "Processando…")
                 try:
                     answer = await self.brain.ask(
                         "[O chefe falou com você pelo microfone da sala — responda "
                         "curto, vai virar fala.]",
                         media=[(utterance, "audio/wav")],
                     )
-                    self._set("speaking")
+                    self._set("speaking", answer)
                     await self._speak(answer)
                 except Exception:
                     log.exception("interação por voz falhou")

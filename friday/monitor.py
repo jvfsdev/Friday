@@ -134,6 +134,7 @@ class FridayMonitor:
         critical = bool(spec.params.get("critical"))
         previous = self._state.get(spec.name)
         self._state[spec.name] = problem
+        self._update_face()
         try:
             if problem and previous is not True:
                 # Só aqui a IA entra: avaliar o alerta e avisar com contexto.
@@ -146,3 +147,13 @@ class FridayMonitor:
                 await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).", critical=False)
         except Exception:
             log.exception("falha ao avisar sobre o monitor '%s'", spec.name)
+
+    def _update_face(self):
+        from . import face_state
+
+        problemas = sorted(n for n, ruim in self._state.items() if ruim)
+        texto = "monitores ok" if not problemas else "⚠ " + ", ".join(problemas)
+        try:
+            face_state.set_hud("monitores", texto)
+        except Exception:
+            pass

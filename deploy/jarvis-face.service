@@ -1,0 +1,25 @@
+# Rosto do JARVIS na tela do notebook — serviço systemd DE USUÁRIO.
+# Instalação (no servidor, junto com o friday.service de usuário):
+#   cp deploy/jarvis-face.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now jarvis-face
+# Ajuste os caminhos para o seu usuário.
+#
+# Sem ambiente desktop (recomendado no notebook velho): o SDL desenha direto
+# no framebuffer via KMS — mantenha a linha SDL_VIDEODRIVER=kmsdrm e adicione
+# seu usuário aos grupos video/render: sudo usermod -aG video,render $USER
+# Com desktop (X11/Wayland): remova a linha SDL_VIDEODRIVER.
+
+[Unit]
+Description=JARVIS - rosto na tela
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jvfs/Friday
+ExecStart=/home/jvfs/Friday/.venv/bin/python -m friday.face
+Environment=SDL_VIDEODRIVER=kmsdrm
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

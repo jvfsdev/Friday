@@ -199,6 +199,26 @@ crie conta gratuita em console.picovoice.ai → Porcupine → treine a palavra
 em português → baixe o `.ppn`. Me chame para plugar (troca do openWakeWord
 pelo Porcupine no `friday/voice.py`).
 
+## 9b. Rosto na tela (pygame, sem navegador)
+
+O orbe animado do JARVIS renderizado nativamente (~50 MB de RAM — feito para
+o notebook velho). Estados (repouso/ouvindo/pensando/falando), legendas do
+que ele entendeu/respondeu, HUD com relógio e monitores, e modo noturno
+automático (no quiet_hours vira só um relógio fraco).
+
+1. `.venv/bin/pip install -e ".[face]"`
+2. Preview local: `python -m friday.face --window --demo` (ESC sai).
+3. Como serviço (tela do notebook ligada direto, sem desktop):
+   ```bash
+   sudo usermod -aG video,render $USER   # acesso ao framebuffer (relogar depois)
+   cp deploy/jarvis-face.service ~/.config/systemd/user/   # ajuste caminhos
+   systemctl --user daemon-reload && systemctl --user enable --now jarvis-face
+   ```
+   Se o servidor tiver desktop gráfico, remova a linha `SDL_VIDEODRIVER=kmsdrm`
+   do service.
+4. Dica: desative o blank do console para a tela não apagar sozinha:
+   `sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&consoleblank=0 /' /etc/default/grub && sudo update-grub`
+
 ## 10. Extras
 
 - **Backup**: descomente `backup_dir` e a rotina `backup-diario` no
