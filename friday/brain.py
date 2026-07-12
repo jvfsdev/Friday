@@ -12,7 +12,7 @@ from google.genai import errors, types
 from . import memory
 from .config import Config, PERSONA_FILE
 from .llm import GeminiPool
-from .tools import Tool, ToolContext
+from .tools import Tool, ToolContext, ToolMedia
 
 log = logging.getLogger("friday.brain")
 
@@ -91,14 +91,24 @@ class Brain:
                 return response.text or "(sem resposta)"
 
             response_parts = []
+            media_parts = []
             for call in calls:
                 result = await self._execute(call.name, dict(call.args or {}))
+                if isinstance(result, ToolMedia):
+                    # A nota vai como resultado da função; os bytes entram como
+                    # mídia na mesma mensagem, para o modelo "ver" o arquivo.
+                    media_parts.append(
+                        types.Part.from_bytes(data=result.data, mime_type=result.mime)
+                    )
+                    result = result.note
                 response_parts.append(
                     types.Part.from_function_response(
                         name=call.name, response={"result": result}
                     )
                 )
-            self.history.append(types.Content(role="user", parts=response_parts))
+            self.history.append(
+                types.Content(role="user", parts=response_parts + media_parts)
+            )
 
         return "Rodei ferramentas demais numa tarefa só e parei por segurança. Reformula o pedido?"
 

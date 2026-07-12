@@ -173,6 +173,49 @@ docker run -d --name homeassistant --restart=unless-stopped \
    duração** → cole em `HA_TOKEN` no `.env` (confira `HA_URL`).
 5. Reinicie a Friday e teste: "Friday, quais dispositivos você vê na casa?"
 
+## 9. Voz na sala (mic e alto-falantes do notebook)
+
+1. Instale as dependências de áudio:
+   `sudo apt install -y ffmpeg alsa-utils` e
+   `.venv/bin/pip install -e ".[voice]"`.
+2. Teste o hardware: `arecord -l` (mic aparece?), `speaker-test -t wav -c 2`
+   (som sai?). Ajuste volume com `alsamixer`.
+3. **Importante**: serviço de sistema não acessa o áudio da sessão. Migre para
+   serviço de usuário:
+   ```bash
+   sudo systemctl disable --now friday
+   mkdir -p ~/.config/systemd/user && cp deploy/friday.service ~/.config/systemd/user/
+   # edite o arquivo: remova a linha User=
+   loginctl enable-linger $USER
+   systemctl --user daemon-reload && systemctl --user enable --now friday
+   journalctl --user -u friday -f
+   ```
+4. No `config.yaml`: `voice: {enabled: true}` e reinicie.
+5. Fale **"Hey Jarvis"** e, após o log de "listening", faça a pergunta.
+   Sensibilidade: ajuste `wake_threshold` (menor = mais sensível).
+
+**Trocar a wake word por um nome próprio** (quando escolher o nome dela):
+crie conta gratuita em console.picovoice.ai → Porcupine → treine a palavra
+em português → baixe o `.ppn`. Me chame para plugar (troca do openWakeWord
+pelo Porcupine no `friday/voice.py`).
+
+## 10. Extras
+
+- **Backup**: descomente `backup_dir` e a rotina `backup-diario` no
+  `config.yaml`. Para copiar à nuvem, configure `rclone` e adicione ao
+  script. Teste manual: `bash scripts/backup.sh /caminho/destino`.
+- **Navegador de verdade** (sites com JavaScript):
+  `.venv/bin/pip install -e ".[browser]" && .venv/bin/playwright install chromium`
+  (~300 MB; avalie se o notebook aguenta — as ferramentas `browse`/
+  `browse_screenshot` aparecem sozinhas quando instalado).
+- **Listas no Notion**: crie a página da lista, compartilhe com a integração
+  e diga a ela: "Friday, anota na memória: a lista do mercado é a página X
+  do Notion" (ela acha o id com notion_search). Depois é só "anota leite".
+- **Presença (requer HA)**: instale o app **Home Assistant Companion** no
+  celular e conecte ao seu HA — surge a entidade `person.*`/device_tracker.
+  Exemplos prontos de monitor `ha_state` e rotina com `only_if` estão
+  comentados no `config.yaml`.
+
 ## Resumo do que a Friday ganha em cada passo
 
 | Passo | Ela passa a conseguir |

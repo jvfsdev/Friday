@@ -35,15 +35,18 @@ async def run_cli(config):
         console.print(Markdown(text))
 
     from .llm import GeminiPool
+    from .notifier import Notifier
 
     ctx = ToolContext(config=config, confirm=confirm, send=send, llm=GeminiPool(config))
     tools = build_tools(config)
     brain = Brain(config, tools, ctx)
 
-    scheduler = FridayScheduler(config, brain, send)
+    notifier = Notifier(config, send)
+    scheduler = FridayScheduler(config, brain, notifier.send)
     tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
     scheduler.start()
-    FridayMonitor(config, brain, send, scheduler.scheduler).start()
+    notifier.attach(scheduler.scheduler)
+    FridayMonitor(config, brain, notifier.send, scheduler.scheduler).start()
 
     console.print("[bold cyan]Friday[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
     while True:
@@ -69,19 +72,28 @@ async def run_telegram(config):
     from .telegram_bot import TelegramInterface
 
     from .llm import GeminiPool
+    from .notifier import Notifier
 
     interface = TelegramInterface(config)
     ctx = ToolContext(
-        config=config, confirm=interface.confirm, send=interface.send, llm=GeminiPool(config)
+        config=config, confirm=interface.confirm, send=interface.send,
+        llm=GeminiPool(config), send_voice=interface.send_voice,
     )
     tools = build_tools(config)
     brain = Brain(config, tools, ctx)
     interface.brain = brain
 
-    scheduler = FridayScheduler(config, brain, interface.send)
+    notifier = Notifier(config, interface.send)
+    scheduler = FridayScheduler(config, brain, notifier.send)
     tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
     scheduler.start()
-    FridayMonitor(config, brain, interface.send, scheduler.scheduler).start()
+    notifier.attach(scheduler.scheduler)
+    FridayMonitor(config, brain, notifier.send, scheduler.scheduler).start()
+
+    if config.voice_enabled:
+        from .voice import VoiceLoop
+
+        asyncio.create_task(VoiceLoop(config, brain).run())
 
     await interface.run_forever()
 

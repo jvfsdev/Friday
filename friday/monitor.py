@@ -30,6 +30,18 @@ async def _run_quiet(command: str, timeout: int = 30) -> tuple[int, str]:
 # Cada checagem retorna (problema?, detalhe legível).
 
 
+async def _ha_get_state(config: Config, entity: str) -> str:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{config.ha_url}/api/states/{entity}",
+            headers={"Authorization": f"Bearer {config.ha_token}"},
+        )
+        resp.raise_for_status()
+        return resp.json().get("state", "unknown")
+
+
 async def _check_disk(params: dict) -> tuple[bool, str]:
     path = params.get("path", "/")
     threshold = float(params.get("threshold_percent", 90))
@@ -58,6 +70,32 @@ async def _check_ping(params: dict) -> tuple[bool, str]:
 CHECKS = {"disk": _check_disk, "command": _check_command, "ping": _check_ping}
 
 
+class _HaStateCheck:
+    """Dispara quando uma entidade do Home Assistant entra no estado configurado.
+
+    params: entity, to (estado-alvo), only_if: {entity, state} opcional.
+    Ex.: person.joao → home ("chegou em casa"); binary_sensor.porta → on
+    com only_if person.joao = not_home ("porta abriu com você fora").
+    """
+
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def __call__(self, params: dict) -> tuple[bool, str]:
+        entity = params["entity"]
+        target = str(params["to"])
+        state = await _ha_get_state(self.config, entity)
+        hit = state == target
+        detail = f"{entity} está '{state}'"
+        cond = params.get("only_if")
+        if hit and cond:
+            cond_state = await _ha_get_state(self.config, cond["entity"])
+            if cond_state != str(cond["state"]):
+                return False, detail + f" (ignorado: {cond['entity']}='{cond_state}')"
+            detail += f" e {cond['entity']}='{cond_state}'"
+        return hit, detail
+
+
 class FridayMonitor:
     def __init__(self, config: Config, brain: Brain, send, scheduler: AsyncIOScheduler):
         self.config = config
@@ -66,10 +104,16 @@ class FridayMonitor:
         self.scheduler = scheduler
         self._state: dict[str, bool] = {}
 
+    def _check_for(self, spec: MonitorSpec):
+        if spec.check == "ha_state":
+            return _HaStateCheck(self.config) if self.config.ha_token else None
+        return CHECKS.get(spec.check)
+
     def start(self):
         for spec in self.config.monitors:
-            if spec.check not in CHECKS:
-                log.warning("monitor '%s': tipo desconhecido '%s' — ignorado", spec.name, spec.check)
+            if self._check_for(spec) is None:
+                log.warning("monitor '%s': tipo '%s' desconhecido ou sem HA configurado — ignorado",
+                            spec.name, spec.check)
                 continue
             self.scheduler.add_job(
                 self._run,
@@ -82,11 +126,12 @@ class FridayMonitor:
 
     async def _run(self, spec: MonitorSpec):
         try:
-            problem, detail = await CHECKS[spec.check](spec.params)
+            problem, detail = await self._check_for(spec)(spec.params)
         except Exception as exc:
             log.exception("monitor '%s' falhou", spec.name)
             problem, detail = True, f"a própria checagem falhou: {type(exc).__name__}: {exc}"
 
+        critical = bool(spec.params.get("critical"))
         previous = self._state.get(spec.name)
         self._state[spec.name] = problem
         try:
@@ -96,8 +141,8 @@ class FridayMonitor:
                     f"[Alerta do monitor '{spec.name}' — detectado agora, avise o chefe "
                     f"de forma útil e sugira o que fazer] {detail}"
                 )
-                await self.send(f"🚨 {answer}")
-            elif not problem and previous is True:
-                await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).")
+                await self.send(f"🚨 {answer}", critical=critical)
+            elif not problem and previous is True and spec.params.get("notify_recovery", True):
+                await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).", critical=False)
         except Exception:
             log.exception("falha ao avisar sobre o monitor '%s'", spec.name)

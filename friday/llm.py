@@ -26,6 +26,8 @@ class GeminiPool:
         self.models: list[str] = config.models
         self.clients = [genai.Client(api_key=key) for key in self.keys]
         self._exhausted: dict[tuple[int, str], float] = {}
+        # (dia, chave, modelo) -> requisições bem-sucedidas (zera no restart)
+        self.usage: dict[tuple[str, int, str], int] = {}
 
     def _available(self):
         now = time.time()
@@ -40,9 +42,12 @@ class GeminiPool:
         for i, client, model in self._available():
             for attempt in (1, 2):
                 try:
-                    return await client.aio.models.generate_content(
+                    response = await client.aio.models.generate_content(
                         model=model, contents=contents, config=gen_config
                     )
+                    day = time.strftime("%Y-%m-%d")
+                    self.usage[(day, i, model)] = self.usage.get((day, i, model), 0) + 1
+                    return response
                 except errors.APIError as exc:
                     last_exc = exc
                     if exc.code == 429:
@@ -66,3 +71,14 @@ class GeminiPool:
         raise RuntimeError(
             "todas as combinações de chave/modelo estão com a cota esgotada no momento"
         )
+
+    def report(self) -> str:
+        day = time.strftime("%Y-%m-%d")
+        now = time.time()
+        lines = []
+        for model in self.models:
+            for i in range(len(self.keys)):
+                used = self.usage.get((day, i, model), 0)
+                status = "ESGOTADA por ora" if self._exhausted.get((i, model), 0) > now else "disponível"
+                lines.append(f"chave {i + 1} × {model}: {used} req hoje (desde o último restart) — {status}")
+        return "\n".join(lines)

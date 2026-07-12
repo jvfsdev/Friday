@@ -59,6 +59,16 @@ class TelegramInterface:
         for chunk in _split(text):
             await self.app.bot.send_message(chat_id=self.config.telegram_user_id, text=chunk)
 
+    async def send_voice(self, text: str):
+        from . import tts
+
+        path = await tts.synthesize_ogg(text)
+        try:
+            with path.open("rb") as f:
+                await self.app.bot.send_voice(chat_id=self.config.telegram_user_id, voice=f)
+        finally:
+            path.unlink(missing_ok=True)
+
     # ---- confirmação de ações perigosas ----
 
     async def confirm(self, description: str) -> bool:

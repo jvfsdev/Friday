@@ -27,6 +27,7 @@ class Routine:
     name: str
     cron: str
     prompt: str
+    only_if: dict | None = None   # {entity, state} no Home Assistant
 
 
 @dataclass
@@ -52,6 +53,11 @@ class Config:
     fallback_model: str = "gemini-2.5-flash-lite"
     timezone: str = "America/Sao_Paulo"
     history_max_turns: int = 40
+    quiet_start: str = ""              # ex.: "23:00" — vazio desativa
+    quiet_end: str = ""                # ex.: "07:00"
+    backup_dir: str = ""               # destino dos backups (vazio desativa)
+    voice_enabled: bool = False        # voz na sala (mic/alto-falante locais)
+    voice_settings: dict = field(default_factory=dict)
     machines: dict[str, Machine] = field(default_factory=dict)
     routines: list[Routine] = field(default_factory=list)
     monitors: list[MonitorSpec] = field(default_factory=list)
@@ -70,7 +76,12 @@ def load_config() -> Config:
         for name, spec in (raw.get("machines") or {}).items()
     }
     routines = [
-        Routine(name=name, cron=spec["cron"], prompt=spec["prompt"].strip())
+        Routine(
+            name=name,
+            cron=spec["cron"],
+            prompt=spec["prompt"].strip(),
+            only_if=spec.get("only_if"),
+        )
         for name, spec in (raw.get("routines") or {}).items()
     ]
     monitors = [
@@ -85,11 +96,14 @@ def load_config() -> Config:
 
     user_id = os.getenv("TELEGRAM_USER_ID", "").strip()
 
-    # Chaves: GEMINI_API_KEYS (lista separada por vírgula) tem precedência;
-    # senão, a GEMINI_API_KEY única de sempre.
-    multi = [k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(",") if k.strip()]
-    single = os.getenv("GEMINI_API_KEY", "").strip()
-    keys = multi or ([single] if single else [])
+    # Chaves: aceita lista separada por vírgula tanto em GEMINI_API_KEYS
+    # quanto na GEMINI_API_KEY clássica (a primeira tem precedência).
+    def _split_keys(value: str) -> list[str]:
+        return [k.strip() for k in value.split(",") if k.strip()]
+
+    keys = _split_keys(os.getenv("GEMINI_API_KEYS", "")) or _split_keys(
+        os.getenv("GEMINI_API_KEY", "")
+    )
 
     # Escada de modelos: lista `models:` ou os campos antigos model/fallback_model.
     models = raw.get("models") or [
@@ -115,4 +129,9 @@ def load_config() -> Config:
         machines=machines,
         routines=routines,
         monitors=monitors,
+        quiet_start=str((raw.get("quiet_hours") or {}).get("inicio", "")),
+        quiet_end=str((raw.get("quiet_hours") or {}).get("fim", "")),
+        backup_dir=str(raw.get("backup_dir", "") or ""),
+        voice_enabled=bool((raw.get("voice") or {}).get("enabled", False)),
+        voice_settings=raw.get("voice") or {},
     )

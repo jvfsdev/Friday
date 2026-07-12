@@ -15,7 +15,14 @@ dependencies = [
     "google-api-python-client>=2.100",
     "google-auth-oauthlib>=1.2",
     "msal>=1.28",
+    "piper-tts>=1.2",
 ]
+
+[project.optional-dependencies]
+# Navegador de verdade (pesado): pip install -e ".[browser]" && playwright install chromium
+browser = ["playwright>=1.45"]
+# Voz na sala (instalar no servidor): mic + wake word + reprodução
+voice = ["openwakeword>=0.6", "onnxruntime", "sounddevice", "numpy"]
 
 [build-system]
 requires = ["setuptools>=68"]

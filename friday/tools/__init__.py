@@ -30,6 +30,18 @@ class ToolContext:
     send: Callable[[str], Awaitable[None]] | None = None
     # Pool de chaves/modelos Gemini compartilhado (escada de fallback).
     llm: Any = None
+    # Envia áudio falado ao chefe (voice note no Telegram); None se não houver.
+    send_voice: Callable[[str], Awaitable[None]] | None = None
+
+
+@dataclass
+class ToolMedia:
+    """Retorno de ferramenta que carrega um arquivo para o Gemini VER
+    (PDF, imagem...), além da nota em texto."""
+
+    note: str
+    data: bytes
+    mime: str
 
 
 @dataclass
@@ -50,6 +62,27 @@ def build_tools(config: "Config") -> dict[str, Tool]:
 
     add(shell.TOOL)
     add(maintenance.TOOL)
+
+    from . import documents, speak
+
+    add(speak.TOOL)
+    add(documents.TOOL)
+
+    async def _usage(ctx: "ToolContext") -> str:
+        if not ctx.llm:
+            return "Pool de modelos indisponível."
+        return ctx.llm.report()
+
+    add(
+        Tool(
+            declaration={
+                "name": "usage_report",
+                "description": "Mostra o uso das cotas do Gemini hoje, por chave de API e modelo.",
+                "parameters": {"type": "OBJECT", "properties": {}},
+            },
+            handler=_usage,
+        )
+    )
     add(web.SEARCH_TOOL)
     add(web.FETCH_TOOL)
     add(
@@ -82,7 +115,11 @@ def build_tools(config: "Config") -> dict[str, Tool]:
         add(home.CONTROL_TOOL)
         add(home.ANNOUNCE_TOOL)
 
-    from . import google_workspace, notion, outlook
+    from . import browser, google_workspace, notion, outlook
+
+    if browser.available():
+        add(browser.BROWSE_TOOL)
+        add(browser.SCREENSHOT_TOOL)
 
     if google_workspace.has_credentials():
         add(google_workspace.LIST_EMAILS_TOOL)

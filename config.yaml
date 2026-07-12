@@ -8,6 +8,22 @@ models:
 timezone: America/Sao_Paulo
 history_max_turns: 40          # janela de contexto da conversa
 
+# Horário de silêncio: avisos proativos não-críticos ficam guardados e chegam
+# juntos de manhã. Monitores com `critical: true` furam o silêncio.
+quiet_hours:
+  inicio: "23:00"
+  fim: "07:00"
+
+# Backups (descomente e ajuste o destino; rotina diária mais abaixo)
+# backup_dir: /home/jvfs/backups-friday
+
+# Voz na sala (ligar SÓ no servidor/notebook — precisa de mic e alto-falante)
+voice:
+  enabled: false
+  wake_threshold: 0.5          # sensibilidade da wake word (0-1)
+  silence_seconds: 1.2         # silêncio que encerra a fala
+  # input_device: null         # dispositivo de captura (padrão do sistema)
+
 # Máquinas que a Friday pode controlar por SSH.
 # Requer chave SSH do servidor autorizada em cada máquina (guia no README).
 machines:
@@ -36,6 +52,19 @@ monitors:
   #   host: 192.168.0.11
   #   alert_when: online     # ou "offline" (padrão)
   #   interval_minutes: 5
+  # chegada-em-casa:         # requer Home Assistant + app companion no celular
+  #   check: ha_state
+  #   entity: person.joao
+  #   to: home
+  #   notify_recovery: false
+  #   interval_minutes: 2
+  # porta-com-casa-vazia:    # exemplo com condição extra e alerta crítico
+  #   check: ha_state
+  #   entity: binary_sensor.porta_entrada
+  #   to: "on"
+  #   only_if: {entity: person.joao, state: not_home}
+  #   critical: true         # fura o horário de silêncio
+  #   interval_minutes: 1
 
 # Rotinas proativas: cron → instrução. O resultado chega no Telegram.
 routines:
@@ -47,3 +76,12 @@ routines:
       hoje na agenda e emails não lidos importantes (se você tiver essas
       ferramentas disponíveis), e qualquer lembrete que você tenha anotado
       na memória para hoje. Seja concisa.
+  # backup-diario:             # requer backup_dir configurado acima
+  #   cron: "30 4 * * *"
+  #   prompt: >
+  #     Rode o backup: execute `bash scripts/backup.sh <backup_dir>` na pasta
+  #     da Friday e me avise apenas se algo der errado.
+  # transito-manha:            # exemplo de rotina condicional (requer HA)
+  #   cron: "40 7 * * 1-5"
+  #   only_if: {entity: person.joao, state: home}
+  #   prompt: Como está o trânsito daqui para o trabalho agora?

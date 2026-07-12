@@ -30,12 +30,23 @@ class FridayScheduler:
                 self._run_routine,
                 CronTrigger.from_crontab(routine.cron, timezone=self.config.timezone),
                 args=[routine.name, routine.prompt],
+                kwargs={"only_if": routine.only_if},
                 id=routine.name,
             )
             log.info("rotina '%s' agendada (%s)", routine.name, routine.cron)
         self.scheduler.start()
 
-    async def _run_routine(self, name: str, prompt: str):
+    async def _run_routine(self, name: str, prompt: str, only_if: dict | None = None):
+        if only_if and self.config.ha_token:
+            from .monitor import _ha_get_state
+
+            try:
+                state = await _ha_get_state(self.config, only_if["entity"])
+                if state != str(only_if["state"]):
+                    log.info("rotina '%s' pulada (%s='%s')", name, only_if["entity"], state)
+                    return
+            except Exception:
+                log.exception("condição only_if da rotina '%s' falhou — executando mesmo assim", name)
         log.info("disparando rotina '%s'", name)
         try:
             answer = await self.brain.ask(
