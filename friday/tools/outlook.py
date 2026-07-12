@@ -18,7 +18,7 @@ from ..config import ROOT
 STATE_DIR = ROOT / "state"
 GRAPH = "https://graph.microsoft.com/v1.0"
 AUTHORITY = "https://login.microsoftonline.com/common"
-SCOPES = ["Mail.Read"]
+SCOPES = ["Mail.Read", "Mail.Send"]
 
 
 def cache_file(account: str):
@@ -59,6 +59,14 @@ async def _graph_get(ctx: ToolContext, account: str, path: str, params: dict) ->
         )
     resp.raise_for_status()
     return resp.json()
+
+
+async def _graph_post(ctx: ToolContext, account: str, path: str, payload: dict) -> httpx.Response:
+    token = await asyncio.to_thread(_access_token_sync, ctx.config.ms_client_id, account)
+    async with httpx.AsyncClient(timeout=30) as client:
+        return await client.post(
+            f"{GRAPH}{path}", json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
 
 
 def _pick(account: str) -> list[str] | str:
@@ -133,6 +141,54 @@ async def _read_email(ctx: ToolContext, message_id: str, account: str = "") -> s
         f"Data: {msg.get('receivedDateTime', '?')}\n\n{text}"
     )
 
+
+async def _send_email(ctx: ToolContext, to: str, subject: str, body: str, account: str = "") -> str:
+    available = accounts()
+    name = account or (available[0] if len(available) == 1 else "")
+    if not name:
+        return f"Há mais de uma conta Microsoft ({', '.join(available)}). Diga qual delas."
+    if name not in available:
+        return f"Conta Microsoft '{name}' não existe. Contas: {', '.join(available)}."
+    preview = body if len(body) <= 800 else body[:800] + "…"
+    ok = await ctx.confirm(
+        f"Enviar email pela conta Microsoft '{name}'?\n\n"
+        f"Para: {to}\nAssunto: {subject}\n\n{preview}"
+    )
+    if not ok:
+        return "Envio cancelado pelo chefe."
+    payload = {
+        "message": {
+            "subject": subject,
+            "body": {"contentType": "Text", "content": body},
+            "toRecipients": [{"emailAddress": {"address": to}}],
+        }
+    }
+    resp = await _graph_post(ctx, name, "/me/sendMail", payload)
+    if resp.status_code >= 400:
+        return f"O envio falhou ({resp.status_code}): {resp.text[:300]}"
+    return f"Email enviado para {to} pela conta {name}."
+
+
+SEND_TOOL = Tool(
+    declaration={
+        "name": "outlook_send_email",
+        "description": (
+            "Envia um email pela conta Microsoft (@hotmail/@outlook) do chefe. O sistema "
+            "SEMPRE pede confirmação dele antes de enviar."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "to": {"type": "STRING", "description": "Destinatário (email)."},
+                "subject": {"type": "STRING", "description": "Assunto."},
+                "body": {"type": "STRING", "description": "Corpo do email, texto simples."},
+                "account": {"type": "STRING", "description": "Conta Microsoft remetente (obrigatória se houver várias)."},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
+    handler=_send_email,
+)
 
 LIST_TOOL = Tool(
     declaration={

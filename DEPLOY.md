@@ -105,6 +105,9 @@ Pode ser feito **no Mac antes do deploy** (precisa de navegador):
    usar quando precisar de uma só ("marca reunião...").
 6. No deploy, copie a pasta `state/` para o servidor junto com o `.env`.
 
+Nota: se você já tinha autorizado antes de a Friday ganhar o envio de emails,
+rode o script de novo para conceder a permissão nova (vale para cada conta).
+
 Nota de privacidade: com app em modo "teste" o token expira a cada 7 dias
 (basta rodar o script de novo). Para não expirar, publique o app na tela de
 consentimento (pode ficar "não verificado" — só você usa). E lembre-se: o
@@ -127,6 +130,9 @@ A Microsoft aposentou o acesso por senha em 2024, então usa-se a API oficial
    aparelho, até o celular), digite o código e faça login. Funciona direto no
    servidor, sem navegador local.
 5. Reinicie a Friday. ("tenho email novo?" passa a olhar Gmail E Hotmail.)
+
+Nota: se você autorizou antes de a Friday ganhar o envio de emails, rode o
+script de novo (por conta) para conceder a permissão Mail.Send.
 
 **Erro "does not exist in tenant 'Microsoft Services'" ao entrar no portal?**
 Contas pessoais sem diretório Azure próprio caem num tenant restrito da

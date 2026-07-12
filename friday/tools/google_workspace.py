@@ -19,6 +19,7 @@ STATE_DIR = ROOT / "state"
 CREDENTIALS_FILE = STATE_DIR / "google_credentials.json"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.events",
 ]
 
@@ -111,6 +112,18 @@ def _read_email_sync(account: str, message_id: str) -> str:
     )
 
 
+def _send_email_sync(account: str, to: str, subject: str, body: str) -> str:
+    from email.mime.text import MIMEText
+
+    gmail = _service("gmail", "v1", account)
+    mime = MIMEText(body, "plain", "utf-8")
+    mime["To"] = to
+    mime["Subject"] = subject
+    raw = base64.urlsafe_b64encode(mime.as_bytes()).decode()
+    gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
+    return f"Email enviado para {to} pela conta {account}."
+
+
 # ---- Calendar ----
 
 
@@ -196,6 +209,20 @@ async def _create_event(ctx: ToolContext, summary: str, start_iso: str, end_iso:
     )
 
 
+async def _send_email(ctx: ToolContext, to: str, subject: str, body: str, account: str = "") -> str:
+    name = _pick_one(account)
+    if not name:
+        return NEED_ONE.format(", ".join(accounts()))
+    preview = body if len(body) <= 800 else body[:800] + "…"
+    ok = await ctx.confirm(
+        f"Enviar email pela conta Google '{name}'?\n\n"
+        f"Para: {to}\nAssunto: {subject}\n\n{preview}"
+    )
+    if not ok:
+        return "Envio cancelado pelo chefe."
+    return await asyncio.to_thread(_send_email_sync, name, to, subject, body)
+
+
 _ACCOUNT_PARAM = {
     "type": "STRING",
     "description": "Nome da conta Google (opcional; se omitido, todas nas consultas).",
@@ -250,6 +277,27 @@ CALENDAR_TOOL = Tool(
         },
     },
     handler=_calendar_events,
+)
+
+SEND_EMAIL_TOOL = Tool(
+    declaration={
+        "name": "send_email",
+        "description": (
+            "Envia um email pelo Gmail do chefe. O sistema SEMPRE pede confirmação "
+            "dele antes de enviar — escreva o email completo e chame a ferramenta."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "to": {"type": "STRING", "description": "Destinatário (email)."},
+                "subject": {"type": "STRING", "description": "Assunto."},
+                "body": {"type": "STRING", "description": "Corpo do email, texto simples."},
+                "account": {"type": "STRING", "description": "Conta Google remetente (obrigatória se houver várias)."},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    },
+    handler=_send_email,
 )
 
 CREATE_EVENT_TOOL = Tool(
