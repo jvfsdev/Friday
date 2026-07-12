@@ -48,7 +48,7 @@ async def run_cli(config):
     notifier.attach(scheduler.scheduler)
     FridayMonitor(config, brain, notifier.send, scheduler.scheduler).start()
 
-    console.print("[bold cyan]Friday[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
+    console.print("[bold cyan]JARVIS[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
     while True:
         try:
             user = (await asyncio.to_thread(input, "você> ")).strip()

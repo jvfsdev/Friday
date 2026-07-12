@@ -62,7 +62,7 @@ TOOL = Tool(
     declaration={
         "name": "run_command",
         "description": (
-            "Executa um comando de shell no servidor onde a Friday está rodando. "
+            "Executa um comando de shell no servidor onde você (JARVIS) está rodando. "
             "Use para consultar o sistema, gerenciar arquivos, ver processos etc."
         ),
         "parameters": {

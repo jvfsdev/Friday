@@ -1,6 +1,6 @@
-# Friday 🤖
+# Projeto Friday 🤖
 
-Assistente pessoal autônoma auto-hospedada, inspirada na FRIDAY do Homem de Ferro.
+Assistente pessoal autônomo auto-hospedado — ele atende por **JARVIS** (persona em `JARVIS.md`; wake word de voz: "hey Jarvis").
 
 - **Cérebro**: Gemini Flash (API gratuita) com function calling
 - **Interface**: bot no Telegram (só responde ao dono) + modo `--cli` para testes

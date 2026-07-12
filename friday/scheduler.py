@@ -83,7 +83,7 @@ class FridayScheduler:
             declaration={
                 "name": "schedule_reminder",
                 "description": (
-                    "Agenda um lembrete único para o futuro. Na hora marcada a Friday "
+                    "Agenda um lembrete único para o futuro. Na hora marcada você "
                     "avisa o chefe. Calcule o horário absoluto a partir do horário atual "
                     "do contexto (ex.: 'daqui 20 min' → agora + 20 min)."
                 ),

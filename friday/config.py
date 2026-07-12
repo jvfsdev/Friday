@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 MEMORY_DIR = ROOT / "memory"
-PERSONA_FILE = ROOT / "FRIDAY.md"
+PERSONA_FILE = ROOT / "JARVIS.md"
 
 
 @dataclass

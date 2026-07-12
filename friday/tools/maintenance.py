@@ -19,7 +19,7 @@ log = logging.getLogger("friday.maintenance")
 
 
 async def _handler(ctx: ToolContext) -> str:
-    ok = await ctx.confirm("Atualizar a Friday (git pull + dependências) e reiniciar?")
+    ok = await ctx.confirm("Atualizar o JARVIS (git pull + dependências) e reiniciar?")
     if not ok:
         return "Atualização cancelada pelo chefe."
 
@@ -51,7 +51,7 @@ TOOL = Tool(
     declaration={
         "name": "update_self",
         "description": (
-            "Atualiza o próprio código da Friday (git pull + dependências) e a reinicia. "
+            "Atualiza o seu próprio código (git pull + dependências) e se reinicia. "
             "Use quando o chefe pedir para você se atualizar."
         ),
         "parameters": {"type": "OBJECT", "properties": {}},
