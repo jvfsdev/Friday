@@ -13,8 +13,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=jarvis
-WorkingDirectory=~/Friday
-ExecStart=~/Friday/.venv/bin/python -m friday
+WorkingDirectory=/home/jarvis/Friday
+ExecStart=/home/jarvis/Friday/.venv/bin/python -m friday
 Restart=always
 RestartSec=10
 
