@@ -27,9 +27,9 @@ voice:
 # Máquinas que a Friday pode controlar por SSH.
 # Requer chave SSH do servidor autorizada em cada máquina (guia no README).
 machines:
-  # mac:
-  #   host: 192.168.0.10
-  #   user: jvfs
+  mac:
+    host: 100.70.155.0
+    user: jvfs
   # pc:
   #   host: 192.168.0.11
   #   user: jvfs
