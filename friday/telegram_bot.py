@@ -57,7 +57,19 @@ class TelegramInterface:
 
     async def send(self, text: str):
         for chunk in _split(text):
-            await self.app.bot.send_message(chat_id=self.config.telegram_user_id, text=chunk)
+            await self._send_formatted(chunk)
+
+    async def _send_formatted(self, chunk: str, reply_to=None):
+        """Envia com formatação; se o HTML sair malformado, cai para texto puro."""
+        kwargs = dict(chat_id=self.config.telegram_user_id)
+        if reply_to is not None:
+            kwargs["reply_to_message_id"] = reply_to
+        try:
+            await self.app.bot.send_message(
+                text=markdown_para_telegram(chunk), parse_mode="HTML", **kwargs
+            )
+        except TelegramError:
+            await self.app.bot.send_message(text=chunk, **kwargs)
 
     async def send_voice(self, text: str):
         from . import tts
@@ -140,7 +152,7 @@ class TelegramInterface:
         finally:
             typing.cancel()
         for chunk in _split(answer):
-            await update.message.reply_text(chunk)
+            await self._send_formatted(chunk, reply_to=update.message.message_id)
 
     async def _keep_typing(self, chat_id: int):
         try:
@@ -177,3 +189,26 @@ class TelegramInterface:
 def _split(text: str) -> list[str]:
     text = text.strip() or "(sem resposta)"
     return [text[i : i + MAX_MESSAGE] for i in range(0, len(text), MAX_MESSAGE)]
+
+
+def markdown_para_telegram(texto: str) -> str:
+    """Converte o Markdown que o modelo escreve para o HTML do Telegram."""
+    import html
+    import re
+
+    partes = re.split(r"```(?:\w+)?\n?(.*?)```", texto, flags=re.DOTALL)
+    saida = []
+    for i, parte in enumerate(partes):
+        if i % 2 == 1:  # dentro de bloco de código: só escapa
+            saida.append(f"<pre>{html.escape(parte.rstrip())}</pre>")
+            continue
+        t = html.escape(parte)
+        t = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", t)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(?<![\w*])\*(\S(?:[^*\n]*\S)?)\*(?![\w*])", r"<i>\1</i>", t)
+        t = re.sub(r"(?<![\w_])_(\S(?:[^_\n]*\S)?)_(?![\w_])", r"<i>\1</i>", t)
+        t = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', t)
+        t = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", t, flags=re.MULTILINE)
+        t = re.sub(r"^(\s*)[-*]\s+", r"\1• ", t, flags=re.MULTILINE)
+        saida.append(t)
+    return "".join(saida)
