@@ -206,7 +206,13 @@ o notebook velho). Estados (repouso/ouvindo/pensando/falando), legendas do
 que ele entendeu/respondeu, HUD com relógio e monitores, e modo noturno
 automático (no quiet_hours vira só um relógio fraco).
 
-1. `.venv/bin/pip install -e ".[face]"`
+1. `.venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[face]"`
+   Se o pip não achar o pygame ("No matching distribution"), use o da distro:
+   ```bash
+   sudo apt install -y python3-pygame
+   # recria o venv enxergando os pacotes do sistema:
+   python3 -m venv --system-site-packages --upgrade .venv
+   ```
 2. Preview local: `python -m friday.face --window --demo` (ESC sai).
 3. Como serviço (tela do notebook ligada direto, sem desktop):
    ```bash

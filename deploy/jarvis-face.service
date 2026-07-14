@@ -15,8 +15,8 @@ After=default.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/jvfs/Friday
-ExecStart=/home/jvfs/Friday/.venv/bin/python -m friday.face
+WorkingDirectory=/home/jarvis/Friday
+ExecStart=/home/jarvis/Friday/.venv/bin/python -m friday.face
 Environment=SDL_VIDEODRIVER=kmsdrm
 Restart=always
 RestartSec=5
