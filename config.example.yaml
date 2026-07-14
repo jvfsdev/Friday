@@ -54,15 +54,23 @@ monitors:
   #   interval_minutes: 5
   # chegada-em-casa:         # requer Home Assistant + app companion no celular
   #   check: ha_state
-  #   entity: person.joao
+  #   entity: person.joao_vitor
   #   to: home
+  #   from: not_home         # só dispara na TRANSIÇÃO (não no boot já em casa)
+  #   notify_recovery: false
+  #   interval_minutes: 2
+  # saiu-do-trabalho:        # requer zona "Trabalho" desenhada no HA
+  #   check: ha_state
+  #   entity: person.joao_vitor
+  #   to: not_home
+  #   from: Trabalho
   #   notify_recovery: false
   #   interval_minutes: 2
   # porta-com-casa-vazia:    # exemplo com condição extra e alerta crítico
   #   check: ha_state
   #   entity: binary_sensor.porta_entrada
   #   to: "on"
-  #   only_if: {entity: person.joao, state: not_home}
+  #   only_if: {entity: person.joao_vitor, state: not_home}
   #   critical: true         # fura o horário de silêncio
   #   interval_minutes: 1
 
@@ -71,11 +79,12 @@ routines:
   resumo-matinal:
     cron: "0 8 * * *"
     prompt: >
-      Faça meu resumo matinal: previsão do tempo para hoje na minha cidade,
-      as 3 principais manchetes do Brasil e do mundo, meus compromissos de
-      hoje na agenda e emails não lidos importantes (se você tiver essas
-      ferramentas disponíveis), e qualquer lembrete que você tenha anotado
-      na memória para hoje. Seja concisa.
+      Faça meu resumo matinal: primeiro descubra onde estou (home_state de
+      person.*; se eu não estiver em casa, use as coordenadas do meu
+      device_tracker) e traga a previsão do tempo DO LUGAR onde estou.
+      Depois: as 3 principais manchetes do Brasil e do mundo, meus
+      compromissos de hoje na agenda, emails não lidos importantes e
+      qualquer lembrete anotado na memória para hoje. Seja conciso.
   # backup-diario:             # requer backup_dir configurado acima
   #   cron: "30 4 * * *"
   #   prompt: >

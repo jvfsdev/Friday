@@ -73,20 +73,27 @@ CHECKS = {"disk": _check_disk, "command": _check_command, "ping": _check_ping}
 class _HaStateCheck:
     """Dispara quando uma entidade do Home Assistant entra no estado configurado.
 
-    params: entity, to (estado-alvo), only_if: {entity, state} opcional.
-    Ex.: person.joao → home ("chegou em casa"); binary_sensor.porta → on
-    com only_if person.joao = not_home ("porta abriu com você fora").
+    params: entity, to (estado-alvo), from (opcional: só dispara vindo DESSE
+    estado — evita disparo no boot), only_if: {entity, state} opcional.
+    Ex.: person.joao → to: home, from: not_home ("chegou em casa");
+    binary_sensor.porta → on com only_if person.joao = not_home.
     """
 
     def __init__(self, config: Config):
         self.config = config
+        self.last: str | None = None
 
     async def __call__(self, params: dict) -> tuple[bool, str]:
         entity = params["entity"]
         target = str(params["to"])
         state = await _ha_get_state(self.config, entity)
+        previous, self.last = self.last, state
         hit = state == target
-        detail = f"{entity} está '{state}'"
+        detail = f"{entity}: '{previous}' → '{state}'"
+        if hit and "from" in params:
+            # Transição explícita: precisa ter VISTO o estado de origem antes.
+            if previous != str(params["from"]):
+                return False, detail + " (sem a transição de origem exigida)"
         cond = params.get("only_if")
         if hit and cond:
             cond_state = await _ha_get_state(self.config, cond["entity"])
@@ -103,10 +110,15 @@ class FridayMonitor:
         self.send = send
         self.scheduler = scheduler
         self._state: dict[str, bool] = {}
+        self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
 
     def _check_for(self, spec: MonitorSpec):
         if spec.check == "ha_state":
-            return _HaStateCheck(self.config) if self.config.ha_token else None
+            if not self.config.ha_token:
+                return None
+            if spec.name not in self._checks:
+                self._checks[spec.name] = _HaStateCheck(self.config)
+            return self._checks[spec.name]
         return CHECKS.get(spec.check)
 
     def start(self):
@@ -137,12 +149,15 @@ class FridayMonitor:
         self._update_face()
         try:
             if problem and previous is not True:
-                # Só aqui a IA entra: avaliar o alerta e avisar com contexto.
-                answer = await self.brain.ask(
-                    f"[Alerta do monitor '{spec.name}' — detectado agora, avise o chefe "
-                    f"de forma útil e sugira o que fazer] {detail}"
+                # Só aqui a IA entra: avaliar o evento e avisar com contexto.
+                icone = spec.params.get("icon", "🚨")
+                instrucao = spec.params.get(
+                    "prompt",
+                    f"Alerta do monitor '{spec.name}' — detectado agora, avise o chefe "
+                    "de forma útil e sugira o que fazer",
                 )
-                await self.send(f"🚨 {answer}", critical=critical)
+                answer = await self.brain.ask(f"[{instrucao}] {detail}")
+                await self.send(f"{icone} {answer}", critical=critical)
             elif not problem and previous is True and spec.params.get("notify_recovery", True):
                 await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).", critical=False)
         except Exception:

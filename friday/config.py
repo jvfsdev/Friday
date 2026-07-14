@@ -67,7 +67,10 @@ def load_config() -> Config:
     load_dotenv(ROOT / ".env")
 
     raw: dict = {}
+    # config.yaml é local (não versionado); o repositório traz o modelo.
     config_file = ROOT / "config.yaml"
+    if not config_file.exists():
+        config_file = ROOT / "config.example.yaml"
     if config_file.exists():
         raw = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
 

@@ -6,7 +6,13 @@ import httpx
 
 from . import Tool, ToolContext, truncate
 
-USEFUL_DOMAINS = ("light", "switch", "climate", "fan", "media_player", "cover", "lock", "scene")
+USEFUL_DOMAINS = ("light", "switch", "climate", "fan", "media_player", "cover", "lock",
+                  "scene", "person", "device_tracker", "weather", "binary_sensor")
+
+# Atributos que valem a pena mostrar ao modelo em home_state.
+ATTR_WHITELIST = ("friendly_name", "latitude", "longitude", "gps_accuracy", "battery_level",
+                  "temperature", "humidity", "pressure", "wind_speed", "wind_bearing",
+                  "source", "speed", "altitude", "device_class")
 
 
 def _client(ctx: ToolContext) -> httpx.AsyncClient:
@@ -28,6 +34,20 @@ async def _devices(ctx: ToolContext) -> str:
             name = state.get("attributes", {}).get("friendly_name", entity_id)
             lines.append(f"{entity_id} — {name} — estado: {state['state']}")
     return truncate("\n".join(lines)) if lines else "Nenhum dispositivo encontrado no Home Assistant."
+
+
+async def _state(ctx: ToolContext, entity_id: str) -> str:
+    async with _client(ctx) as client:
+        resp = await client.get(f"/states/{entity_id}")
+        if resp.status_code >= 400:
+            return f"Home Assistant recusou ({resp.status_code}): entidade existe?"
+    data = resp.json()
+    attrs = data.get("attributes", {})
+    linhas = [f"{entity_id} → {data['state']}"]
+    for chave in ATTR_WHITELIST:
+        if chave in attrs:
+            linhas.append(f"  {chave}: {attrs[chave]}")
+    return "\n".join(linhas)
 
 
 async def _control(ctx: ToolContext, entity_id: str, action: str) -> str:
@@ -64,6 +84,25 @@ DEVICES_TOOL = Tool(
         "parameters": {"type": "OBJECT", "properties": {}},
     },
     handler=_devices,
+)
+
+STATE_TOOL = Tool(
+    declaration={
+        "name": "home_state",
+        "description": (
+            "Lê o estado e atributos de uma entidade do Home Assistant — inclusive onde "
+            "o chefe está (person.*), localização GPS do celular (device_tracker.*) e "
+            "clima (weather.*)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "entity_id": {"type": "STRING", "description": "Ex.: person.joao_vitor, weather.forecast_casa"}
+            },
+            "required": ["entity_id"],
+        },
+    },
+    handler=_state,
 )
 
 CONTROL_TOOL = Tool(

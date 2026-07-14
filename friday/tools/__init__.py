@@ -112,6 +112,7 @@ def build_tools(config: "Config") -> dict[str, Tool]:
 
     if config.ha_token:
         add(home.DEVICES_TOOL)
+        add(home.STATE_TOOL)
         add(home.CONTROL_TOOL)
         add(home.ANNOUNCE_TOOL)
 
