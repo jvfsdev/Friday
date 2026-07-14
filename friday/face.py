@@ -167,6 +167,10 @@ class Face:
 
             dados = face_state.read()
             estado = dados.get("state", "idle")
+            # Estado velho demais = processo que o publicou já era; volta ao repouso.
+            idade = time.time() - dados.get("updated_at", 0)
+            if estado != "idle" and idade > 90:
+                estado = "idle"
             t = time.monotonic()
 
             self.screen.fill(FUNDO)
