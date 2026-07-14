@@ -19,7 +19,7 @@ quiet_hours:
 
 # Voz na sala (ligar SÓ no servidor/notebook — precisa de mic e alto-falante)
 voice:
-  enabled: false
+  enabled: true
   wake_threshold: 0.5          # sensibilidade da wake word (0-1)
   silence_seconds: 1.2         # silêncio que encerra a fala
   # input_device: null         # dispositivo de captura (padrão do sistema)
