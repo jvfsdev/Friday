@@ -42,6 +42,10 @@ def _dim(cor, fator):
 
 class Face:
     def __init__(self, window: bool, demo: bool):
+        import os
+
+        # O rosto não usa som — deixa o dispositivo de áudio livre para a voz.
+        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         import pygame
 
         self.pg = pygame
