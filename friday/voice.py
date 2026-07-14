@@ -77,17 +77,23 @@ class VoiceLoop:
             device=self.input_device, callback=on_audio,
         )
         log.info("ouvindo a sala (wake word: hey jarvis)")
+        piso_ruido = 0.0  # média móvel do RMS ambiente, medida em repouso
         with stream:
             self._set("idle")
             while True:
                 chunk = await queue.get()
-                scores = wake.predict(np.frombuffer(chunk, dtype=np.int16))
+                dados = np.frombuffer(chunk, dtype=np.int16)
+                rms = float(np.sqrt(np.mean(dados.astype(np.float64) ** 2)))
+                piso_ruido = rms if piso_ruido == 0 else 0.97 * piso_ruido + 0.03 * rms
+                scores = wake.predict(dados)
                 if scores.get("hey_jarvis", 0) < self.wake_threshold:
                     continue
 
                 wake.reset()
                 self._set("listening", "Ouvindo…")
-                utterance = await self._record_utterance(queue, np)
+                # fala = bem acima do ruído ambiente medido agora há pouco
+                limiar = max(400.0, piso_ruido * 1.7)
+                utterance = await self._record_utterance(queue, np, limiar)
                 if utterance is None:
                     self._set("idle")
                     continue
@@ -106,7 +112,7 @@ class VoiceLoop:
                 self._drain(queue)  # descarta o que o mic pegou da própria fala
                 self._set("idle")
 
-    async def _record_utterance(self, queue, np) -> bytes | None:
+    async def _record_utterance(self, queue, np, limiar: float) -> bytes | None:
         frames: list[bytes] = []
         started = time.monotonic()
         last_sound = started
@@ -118,7 +124,7 @@ class VoiceLoop:
             frames.append(chunk)
             rms = float(np.sqrt(np.mean(np.frombuffer(chunk, np.int16).astype(np.float64) ** 2)))
             now = time.monotonic()
-            if rms > 300:  # há fala
+            if rms > limiar:  # há fala acima do ruído ambiente
                 last_sound = now
             if now - last_sound > self.silence_seconds and now - started > 1.5:
                 break
