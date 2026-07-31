@@ -242,6 +242,40 @@ automático (no quiet_hours vira só um relógio fraco).
   Exemplos prontos de monitor `ha_state` e rotina com `only_if` estão
   comentados no `config.yaml`.
 
+## 11. Open Finance (gastos, cartões, orçamentos) — via ponte MCP
+
+Integra o [openfinance-analyst](https://github.com/meloluan/openfinance-analyst)
+(servidor MCP + Pluggy). O JARVIS passa a responder "onde foi meu dinheiro?",
+achar assinaturas recorrentes, acompanhar fatura/parcelas e orçamentos.
+⚠️ Lembre: as análises passam pelo Gemini (free tier = dados podem treinar).
+
+No servidor:
+```bash
+sudo apt install -y nodejs npm build-essential
+git clone https://github.com/meloluan/openfinance-analyst.git ~/openfinance-analyst
+cd ~/openfinance-analyst && npm install && npm run build
+cd ~/Friday && .venv/bin/pip install -e ".[mcp]"
+```
+
+Na Pluggy (uma vez):
+1. Crie conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) → crie uma
+   aplicação → copie `CLIENT_ID` e `CLIENT_SECRET`.
+2. Em [meu.pluggy.ai](https://meu.pluggy.ai) conecte seus bancos (conector
+   "MeuPluggy" — dados do próprio CPF, grátis sem prazo) e anote os item ids.
+3. No `.env` do JARVIS:
+   ```
+   PLUGGY_CLIENT_ID=...
+   PLUGGY_CLIENT_SECRET=...
+   PLUGGY_ITEM_IDS=id1,id2
+   ```
+4. No `config.yaml`, descomente o bloco `mcp_servers:` (exemplo no
+   config.example.yaml) e reinicie o serviço.
+5. Teste: "JARVIS, sincroniza meus dados bancários" e depois
+   "onde foi meu dinheiro esse mês?".
+
+A ponte MCP é genérica: outros servidores MCP entram do mesmo jeito, só
+adicionando blocos em `mcp_servers:`.
+
 ## Resumo do que a Friday ganha em cada passo
 
 | Passo | Ela passa a conseguir |
