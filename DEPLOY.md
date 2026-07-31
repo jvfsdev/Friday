@@ -273,6 +273,15 @@ Na Pluggy (uma vez):
 5. Teste: "JARVIS, sincroniza meus dados bancários" e depois
    "onde foi meu dinheiro esse mês?".
 
+**Patch para rodar em Linux**: o projeto guarda a chave do SQLCipher no
+Keychain do macOS (`/usr/bin/security`), que não existe no servidor — sem
+isso ele morre no boot com `spawnSync ENOENT`. O clone em
+`~/openfinance-analyst` já tem a correção commitada (chave via
+`OFA_SQLCIPHER_KEY` ou arquivo 0600 no diretório de dados). Se o upstream
+adotar o patch, o commit local vira redundante e o `git pull` resolve
+sozinho; até lá, **depois de atualizar o projeto rode `npm run build`** e
+confira se a correção sobreviveu ao merge.
+
 A ponte MCP é genérica: outros servidores MCP entram do mesmo jeito, só
 adicionando blocos em `mcp_servers:`.
 
