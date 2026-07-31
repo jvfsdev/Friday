@@ -39,6 +39,10 @@ async def run_cli(config):
 
     ctx = ToolContext(config=config, confirm=confirm, send=send, llm=GeminiPool(config))
     tools = build_tools(config)
+    if config.mcp_servers:
+        from .mcp_bridge import McpBridge
+
+        tools.update(await McpBridge(config).start())
     brain = Brain(config, tools, ctx)
 
     notifier = Notifier(config, send)
@@ -80,6 +84,10 @@ async def run_telegram(config):
         llm=GeminiPool(config), send_voice=interface.send_voice,
     )
     tools = build_tools(config)
+    if config.mcp_servers:
+        from .mcp_bridge import McpBridge
+
+        tools.update(await McpBridge(config).start())
     brain = Brain(config, tools, ctx)
     interface.brain = brain
 

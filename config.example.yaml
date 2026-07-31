@@ -94,3 +94,11 @@ routines:
   #   cron: "40 7 * * 1-5"
   #   only_if: {entity: person.joao, state: home}
   #   prompt: Como está o trânsito daqui para o trabalho agora?
+
+# Servidores MCP plugáveis: qualquer servidor Model Context Protocol vira
+# ferramenta do JARVIS (requer: pip install -e ".[mcp]"). Segredos ficam no
+# .env — o servidor filho herda o ambiente do JARVIS automaticamente.
+# mcp_servers:
+#   openfinance:               # github.com/meloluan/openfinance-analyst
+#     command: node
+#     args: [/home/jarvis/openfinance-analyst/dist/index.js]

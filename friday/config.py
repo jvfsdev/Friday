@@ -58,6 +58,7 @@ class Config:
     backup_dir: str = ""               # destino dos backups (vazio desativa)
     voice_enabled: bool = False        # voz na sala (mic/alto-falante locais)
     voice_settings: dict = field(default_factory=dict)
+    mcp_servers: dict = field(default_factory=dict)  # servidores MCP plugáveis
     machines: dict[str, Machine] = field(default_factory=dict)
     routines: list[Routine] = field(default_factory=list)
     monitors: list[MonitorSpec] = field(default_factory=list)
@@ -137,4 +138,5 @@ def load_config() -> Config:
         backup_dir=str(raw.get("backup_dir", "") or ""),
         voice_enabled=bool((raw.get("voice") or {}).get("enabled", False)),
         voice_settings=raw.get("voice") or {},
+        mcp_servers=raw.get("mcp_servers") or {},
     )
