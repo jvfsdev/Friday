@@ -285,6 +285,65 @@ confira se a correção sobreviveu ao merge.
 A ponte MCP é genérica: outros servidores MCP entram do mesmo jeito, só
 adicionando blocos em `mcp_servers:`.
 
+## 12. Código delegado ao Mac (Claude Code / Antigravity)
+
+O servidor não roda agentes de código (CPU de 2011 sem as instruções que os
+binários exigem). Ele delega ao Mac — que precisa de um executor rodando na
+sessão gráfica, porque sessões SSH no macOS não abrem o Keychain do login
+(onde ficam as credenciais do Claude Code) nem conseguem abrir o editor.
+
+No **Mac**:
+```bash
+npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code
+curl -fsSL https://antigravity.google/cli/install.sh | bash   # opcional
+agy                       # faça o login com a conta Google AI Pro (uma vez)
+mkdir -p ~/.jarvis && cp scripts/mac_runner.py ~/.jarvis/
+cp deploy/com.jarvis.runner.plist ~/Library/LaunchAgents/
+launchctl load -w ~/Library/LaunchAgents/com.jarvis.runner.plist
+```
+Ative **Ajustes → Geral → Compartilhamento → Sessão Remota** e autorize a
+chave do servidor (`ssh-copy-id`). Confira o executor com
+`launchctl list | grep jarvis` e o log em `/tmp/jarvis-runner.log`.
+
+⚠️ **Permissão do macOS**: se os seus repositórios ficam em `~/Documents`,
+conceda **Acesso Total ao Disco** ao `/usr/bin/python3` em Ajustes →
+Privacidade e Segurança — senão o executor é bloqueado pelo sistema ao tocar
+essa pasta. (Repositórios fora de Documents/Desktop/Downloads não precisam.)
+
+No `config.yaml` do servidor, declare a lista fechada `code_projects:`
+(exemplo no config.example.yaml). Teste: "JARVIS, no projeto X, adicione ...".
+
+## 13. Ligações telefônicas (Twilio)
+
+1. Crie conta em [twilio.com](https://www.twilio.com), compre um número
+   brasileiro e verifique o seu celular.
+2. No `.env`: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+   e `USER_PHONE_NUMBER` (formato +5532...).
+3. Publique o servidor interno **sem abrir porta no roteador**:
+   ```bash
+   tailscale funnel --bg 8765
+   tailscale funnel status        # copie a URL https://...ts.net
+   ```
+4. No `config.yaml`, bloco `web:` com `public_url` igual a essa URL.
+5. Reinicie. Teste: "JARVIS, me liga para confirmar uma coisa".
+
+A conversa é livre: ele fala, você responde falando. Antes de executar
+qualquer ação ele repete o que entendeu e espera o seu sim — e toda a
+transcrição chega no Telegram no fim.
+
+## 14. Reclamações de clientes (o fluxo completo)
+
+Duas entradas possíveis, ambas caindo no mesmo roteiro:
+- **Email**: monitor `gmail` com `pipeline: reclamacao` (exemplo comentado no
+  config). Use um rótulo do Gmail para filtrar o que é reclamação.
+- **Sistema de suporte**: `POST {public_url}/intake` com o header
+  `X-Jarvis-Token: <INTAKE_TOKEN do .env>` e um JSON qualquer no corpo.
+
+O que acontece: ele estuda → manda o resumo no Telegram → se dá para corrigir
+num projeto da lista, **liga** pedindo autorização → autorizado, o agente
+trabalha no Mac, abre o editor com o branch e ainda deixa um rascunho de
+resposta ao cliente (que só sai com a sua confirmação).
+
 ## Resumo do que a Friday ganha em cada passo
 
 | Passo | Ela passa a conseguir |

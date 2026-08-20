@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 
@@ -98,12 +99,62 @@ async def run_telegram(config):
     brain = Brain(config, tools, ctx)
     interface.brain = brain
 
-    notifier = Notifier(config, interface.send)
+    from .phone import PhoneService
+
+    phone = PhoneService(config, ctx.llm, notifier=interface.send)
+    notifier = Notifier(
+        config, interface.send,
+        call_user=(lambda texto: phone.ligar(texto)) if phone.disponivel() else None,
+    )
     scheduler = FridayScheduler(config, brain, notifier.send)
     tools[scheduler.reminder_tool().declaration["name"]] = scheduler.reminder_tool()
     scheduler.start()
     notifier.attach(scheduler.scheduler)
-    FridayMonitor(config, brain, notifier.send, scheduler.scheduler).start()
+
+    from .pipelines.reclamacao import PipelineReclamacao
+
+    pipelines = {
+        "reclamacao": PipelineReclamacao(config, brain, notifier, jobs, phone=phone)
+    }
+    FridayMonitor(config, brain, notifier.send, scheduler.scheduler, pipelines).start()
+
+    # ferramenta de escalada para o próprio JARVIS subir o tom
+    async def _escalate(tool_ctx, message: str, level: str = "high") -> str:
+        await notifier.send(message, urgency=level)
+        return f"Avisei o chefe no nível '{level}'."
+
+    from .tools import Tool
+
+    tools["escalate"] = Tool(
+        declaration={
+            "name": "escalate",
+            "description": (
+                "Avisa o chefe com urgência maior que o normal: 'high' (notificação no "
+                "celular), 'critical' (fura o Não Perturbe) ou 'decision' (liga para ele). "
+                "Use só quando realmente importar."
+            ),
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "message": {"type": "STRING", "description": "O aviso."},
+                    "level": {"type": "STRING", "description": "high, critical ou decision."},
+                },
+                "required": ["message"],
+            },
+        },
+        handler=_escalate,
+    )
+
+    if config.public_url or config.intake_token:
+        from .web import WebServer
+
+        servidor = WebServer(
+            config, phone=phone,
+            on_intake=lambda payload: pipelines["reclamacao"].processar(
+                json.dumps(payload, ensure_ascii=False)[:6000], origem="sistema de suporte"
+            ),
+        )
+        await servidor.start()
 
     if config.voice_enabled:
         from .voice import VoiceLoop

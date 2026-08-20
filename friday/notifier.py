@@ -25,9 +25,11 @@ def _parse(hhmm: str) -> time:
 
 
 class Notifier:
-    def __init__(self, config: Config, send_raw):
+    def __init__(self, config: Config, send_raw, call_user=None):
         self.config = config
         self.send_raw = send_raw
+        self.call_user = call_user      # async (texto) -> None, ligação telefônica
+        self._servicos_push: list[str] = []
         self.start_quiet = _parse(config.quiet_start) if config.quiet_start else None
         self.end_quiet = _parse(config.quiet_end) if config.quiet_end else None
 
@@ -40,8 +42,61 @@ class Notifier:
             return self.start_quiet <= t < self.end_quiet
         return t >= self.start_quiet or t < self.end_quiet  # cruza a meia-noite
 
-    async def send(self, text: str, critical: bool = False):
-        if critical or not self.is_quiet():
+    async def _push_celular(self, text: str, critico: bool):
+        """Notificação no app do Home Assistant — a crítica fura o Não Perturbe."""
+        import httpx
+
+        if not self.config.ha_token:
+            return
+        async with httpx.AsyncClient(timeout=15) as client:
+            cabecalho = {"Authorization": f"Bearer {self.config.ha_token}"}
+            if not self._servicos_push:
+                resp = await client.get(f"{self.config.ha_url}/api/services", headers=cabecalho)
+                resp.raise_for_status()
+                for dominio in resp.json():
+                    if dominio.get("domain") == "notify":
+                        self._servicos_push = [
+                            s for s in dominio.get("services", {}) if s.startswith("mobile_app_")
+                        ]
+            for servico in self._servicos_push:
+                dados = {"message": text[:900], "title": "JARVIS"}
+                if critico:
+                    # canal de alarme no Android / alerta crítico no iOS
+                    dados["data"] = {
+                        "ttl": 0, "priority": "high",
+                        "channel": "alarm_stream",
+                        "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0}},
+                    }
+                await client.post(
+                    f"{self.config.ha_url}/api/services/notify/{servico}",
+                    headers=cabecalho, json=dados,
+                )
+
+    async def send(self, text: str, urgency: str = "normal", critical: bool = False):
+        """Escada de urgência:
+        normal   -> Telegram (respeita o horário de silêncio)
+        high     -> Telegram + notificação no celular
+        critical -> + notificação crítica, que fura o Não Perturbe
+        decision -> + ligação telefônica (precisa de decisão do chefe)
+        """
+        if critical and urgency == "normal":   # compatibilidade
+            urgency = "critical"
+
+        if urgency == "decision" and self.call_user:
+            try:
+                await self.call_user(text)
+                return
+            except Exception:
+                log.exception("ligação falhou — caindo para notificação crítica")
+                urgency = "critical"
+
+        if urgency in ("high", "critical"):
+            try:
+                await self._push_celular(text, critico=urgency == "critical")
+            except Exception:
+                log.exception("falha ao mandar push pelo Home Assistant")
+
+        if urgency != "normal" or not self.is_quiet():
             await self.send_raw(text)
             return
         queue = self._load()

@@ -62,6 +62,15 @@ class Config:
     code_projects: dict = field(default_factory=dict)   # lista fechada p/ o agente
     code_agents: dict = field(default_factory=dict)     # nome -> comando
     code_agent_order: list = field(default_factory=list)
+    # Servidor web interno (webhooks da Twilio e do sistema de suporte)
+    web_port: int = 8765
+    public_url: str = ""               # URL do tailscale funnel
+    intake_token: str = ""             # protege o webhook /intake
+    twilio_sid: str = ""
+    twilio_token: str = ""
+    twilio_from: str = ""
+    user_phone: str = ""
+    twilio_voice: str = "Polly.Vitoria-Neural"
     machines: dict[str, Machine] = field(default_factory=dict)
     routines: list[Routine] = field(default_factory=list)
     monitors: list[MonitorSpec] = field(default_factory=list)
@@ -145,4 +154,12 @@ def load_config() -> Config:
         code_projects=raw.get("code_projects") or {},
         code_agents=(raw.get("code") or {}).get("agents") or {},
         code_agent_order=(raw.get("code") or {}).get("order") or [],
+        web_port=int((raw.get("web") or {}).get("port", 8765)),
+        public_url=str((raw.get("web") or {}).get("public_url", "") or "").rstrip("/"),
+        intake_token=os.getenv("INTAKE_TOKEN", "").strip(),
+        twilio_sid=os.getenv("TWILIO_ACCOUNT_SID", "").strip(),
+        twilio_token=os.getenv("TWILIO_AUTH_TOKEN", "").strip(),
+        twilio_from=os.getenv("TWILIO_FROM_NUMBER", "").strip(),
+        user_phone=os.getenv("USER_PHONE_NUMBER", "").strip(),
+        twilio_voice=str((raw.get("web") or {}).get("voice", "Polly.Vitoria-Neural")),
     )

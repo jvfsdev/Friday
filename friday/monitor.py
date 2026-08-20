@@ -124,6 +124,67 @@ class _DriveFolderCheck:
         return True, f"arquivo(s) novo(s) no Drive: {descricao}"
 
 
+class _GmailCheck:
+    """Dispara quando chega email novo que casa com a busca configurada.
+
+    params: query (sintaxe do Gmail), account, prompt/pipeline opcionais.
+    Na primeira execução só memoriza o que já existe.
+    """
+
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def __call__(self, params: dict) -> tuple[bool, str]:
+        import json
+
+        from .config import ROOT
+        from .tools.google_workspace import _pick_one, _service
+
+        conta = _pick_one(params.get("account", ""))
+        if not conta:
+            return False, "monitor de email precisa de 'account' quando há várias contas"
+        consulta = params.get("query", "is:unread category:primary")
+
+        def buscar():
+            gmail = _service("gmail", "v1", conta)
+            resp = gmail.users().messages().list(
+                userId="me", q=consulta, maxResults=10
+            ).execute()
+            achados = []
+            for ref in resp.get("messages", []):
+                msg = gmail.users().messages().get(
+                    userId="me", id=ref["id"], format="metadata",
+                    metadataHeaders=["From", "Subject"],
+                ).execute()
+                cab = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
+                achados.append({
+                    "id": ref["id"],
+                    "de": cab.get("From", "?"),
+                    "assunto": cab.get("Subject", "(sem assunto)"),
+                    "resumo": msg.get("snippet", "")[:200],
+                })
+            return achados
+
+        emails = await asyncio.to_thread(buscar)
+        caminho = ROOT / "state" / f"gmail_seen_{params.get('_nome', 'monitor')}.json"
+        try:
+            vistos = set(json.loads(caminho.read_text(encoding="utf-8")))
+            primeira_vez = False
+        except (OSError, json.JSONDecodeError):
+            vistos, primeira_vez = set(), True
+
+        novos = [e for e in emails if e["id"] not in vistos]
+        caminho.parent.mkdir(exist_ok=True)
+        caminho.write_text(json.dumps(sorted({e["id"] for e in emails} | vistos)[-200:]), encoding="utf-8")
+
+        if primeira_vez or not novos:
+            return False, f"{len(emails)} email(s) na busca, nenhum novo"
+
+        self.ultimos = novos  # o pipeline lê daqui
+        descricao = "; ".join(f"{e['assunto']} (de {e['de']}, id {e['id']}, conta {conta})" for e in novos[:3])
+        return True, f"email(s) novo(s): {descricao}"
+
+
 class _HaStateCheck:
     """Dispara quando uma entidade do Home Assistant entra no estado configurado.
 
@@ -158,11 +219,13 @@ class _HaStateCheck:
 
 
 class FridayMonitor:
-    def __init__(self, config: Config, brain: Brain, send, scheduler: AsyncIOScheduler):
+    def __init__(self, config: Config, brain: Brain, send, scheduler: AsyncIOScheduler,
+                 pipelines: dict | None = None):
         self.config = config
         self.brain = brain
         self.send = send
         self.scheduler = scheduler
+        self.pipelines = pipelines or {}
         self._state: dict[str, bool] = {}
         self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
 
@@ -171,6 +234,11 @@ class FridayMonitor:
             spec.params.setdefault("_nome", spec.name)
             if spec.name not in self._checks:
                 self._checks[spec.name] = _DriveFolderCheck(self.config)
+            return self._checks[spec.name]
+        if spec.check == "gmail":
+            spec.params.setdefault("_nome", spec.name)
+            if spec.name not in self._checks:
+                self._checks[spec.name] = _GmailCheck(self.config)
             return self._checks[spec.name]
         if spec.check == "ha_state":
             if not self.config.ha_token:
@@ -203,10 +271,19 @@ class FridayMonitor:
             problem, detail = True, f"a própria checagem falhou: {type(exc).__name__}: {exc}"
 
         critical = bool(spec.params.get("critical"))
+        urgencia = spec.params.get("urgency") or ("critical" if critical else "normal")
         previous = self._state.get(spec.name)
         self._state[spec.name] = problem
         self._update_face()
         try:
+            if problem and previous is not True and spec.params.get("pipeline"):
+                # Evento vai para um roteiro próprio (ex.: reclamação de cliente).
+                pipeline = self.pipelines.get(spec.params["pipeline"])
+                if pipeline:
+                    await pipeline.processar(detail, origem=f"monitor {spec.name}")
+                    return
+                log.warning("pipeline '%s' não registrado", spec.params["pipeline"])
+
             if problem and previous is not True:
                 # Só aqui a IA entra: avaliar o evento e avisar com contexto.
                 icone = spec.params.get("icon", "🚨")
@@ -216,9 +293,9 @@ class FridayMonitor:
                     "de forma útil e sugira o que fazer",
                 )
                 answer = await self.brain.ask(f"[{instrucao}] {detail}")
-                await self.send(f"{icone} {answer}", critical=critical)
+                await self.send(f"{icone} {answer}", urgency=urgencia)
             elif not problem and previous is True and spec.params.get("notify_recovery", True):
-                await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).", critical=False)
+                await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).")
         except Exception:
             log.exception("falha ao avisar sobre o monitor '%s'", spec.name)
 

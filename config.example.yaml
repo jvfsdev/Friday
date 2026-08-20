@@ -72,6 +72,22 @@ monitors:
   #   from: Trabalho
   #   notify_recovery: false
   #   interval_minutes: 2
+  # reclamacoes-clientes:    # dispara o pipeline da reclamação (Fase F)
+  #   check: gmail
+  #   query: "is:unread label:suporte"     # sintaxe de busca do Gmail
+  #   account: principal
+  #   pipeline: reclamacao
+  #   interval_minutes: 5
+  # pasta-entrada-drive:     # joga um PDF lá e ele lê e resume
+  #   check: drive_folder
+  #   folder_id: COLE_O_ID_DA_PASTA
+  #   account: principal
+  #   interval_minutes: 10
+  # ci-quebrou:              # build falhou -> escada de urgência
+  #   check: command
+  #   command: cd ~/repos/projeto && gh run list -L 1 --json conclusion -q '.[0].conclusion' | grep -qv failure
+  #   urgency: high
+  #   interval_minutes: 15
   # porta-com-casa-vazia:    # exemplo com condição extra e alerta crítico
   #   check: ha_state
   #   entity: binary_sensor.porta_entrada
@@ -96,6 +112,12 @@ routines:
   #   prompt: >
   #     Rode o backup: execute `bash scripts/backup.sh <backup_dir>` na pasta
   #     da Friday e me avise apenas se algo der errado.
+  # resumo-do-dia:             # o que foi codado hoje (Fase G)
+  #   cron: "0 20 * * 1-5"
+  #   prompt: >
+  #     Rode `git log --since=today --oneline` em cada projeto da minha lista
+  #     (use run_on_machine na máquina certa) e me faça um resumo do que
+  #     avançou hoje. Se não houve commits, diga só isso.
   # transito-manha:            # exemplo de rotina condicional (requer HA)
   #   cron: "40 7 * * 1-5"
   #   only_if: {entity: person.joao, state: home}
@@ -122,3 +144,10 @@ routines:
 #   openfinance:               # github.com/meloluan/openfinance-analyst
 #     command: node
 #     args: [/home/jarvis/openfinance-analyst/dist/index.js]
+
+# Servidor web interno (webhooks de ligação e do sistema de suporte).
+# Publique com: tailscale funnel --bg 8765   (não abra porta no roteador!)
+# web:
+#   port: 8765
+#   public_url: https://jarvis.SEU-TAILNET.ts.net
+#   voice: Polly.Vitoria-Neural     # voz da Twilio nas ligações

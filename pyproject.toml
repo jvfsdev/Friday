@@ -17,6 +17,8 @@ dependencies = [
     "msal>=1.28",
     "piper-tts>=1.2",
     "edge-tts>=6.1",
+    "aiohttp>=3.9",
+    "twilio>=9.0",
 ]
 
 [project.optional-dependencies]
