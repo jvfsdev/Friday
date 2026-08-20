@@ -20,12 +20,40 @@ import wave
 
 from . import face_state
 from .brain import Brain
-from .config import Config
+from .config import ROOT, Config
 
 log = logging.getLogger("friday.voice")
 
 RATE = 16000
 CHUNK = 1280  # 80 ms — tamanho que o openWakeWord espera
+
+
+BEEP_FILE = ROOT / "state" / "wake_beep.wav"
+
+
+def _ensure_beep():
+    """Gera uma vez um bipe curto de confirmação (440->660Hz, 160ms)."""
+    if BEEP_FILE.exists():
+        return BEEP_FILE
+    import math
+    import struct
+    import wave as wavelib
+
+    taxa, dur = 16000, 0.16
+    quadros = int(taxa * dur)
+    dados = bytearray()
+    for i in range(quadros):
+        t = i / taxa
+        freq = 440 + (660 - 440) * (i / quadros)
+        env = min(1.0, i / (taxa * 0.01), (quadros - i) / (taxa * 0.04))
+        dados += struct.pack("<h", int(9000 * env * math.sin(2 * math.pi * freq * t)))
+    BEEP_FILE.parent.mkdir(exist_ok=True)
+    with wavelib.open(str(BEEP_FILE), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(taxa)
+        f.writeframes(bytes(dados))
+    return BEEP_FILE
 
 
 class VoiceLoop:
@@ -36,7 +64,7 @@ class VoiceLoop:
         self.on_state = on_state or face_state.publish
         s = config.voice_settings
         self.wake_threshold = float(s.get("wake_threshold", 0.5))
-        self.silence_seconds = float(s.get("silence_seconds", 1.2))
+        self.silence_seconds = float(s.get("silence_seconds", 0.9))
         self.max_utterance = float(s.get("max_utterance_seconds", 15))
         self.input_device = s.get("input_device")  # None = padrão do sistema
 
@@ -91,6 +119,7 @@ class VoiceLoop:
 
                 wake.reset()
                 self._set("listening", "Ouvindo…")
+                await self._beep()
                 # fala = bem acima do ruído ambiente medido agora há pouco
                 limiar = max(400.0, piso_ruido * 1.7)
                 utterance = await self._record_utterance(queue, np, limiar)
@@ -146,9 +175,18 @@ class VoiceLoop:
         if not tts.available():
             log.error("TTS indisponível — resposta de voz perdida: %s", text[:80])
             return
-        path = await tts.synthesize_wav(text)
-        await tts.play(path)
-        path.unlink(missing_ok=True)
+        # Streaming por frases: a primeira já toca enquanto as outras sintetizam.
+        await tts.speak_streaming(text)
+
+    async def _beep(self):
+        """Confirma o wake word na hora — o chefe sabe que foi ouvido antes
+        mesmo de o Gemini responder."""
+        from . import tts
+
+        try:
+            await tts.play(_ensure_beep())
+        except Exception:
+            pass
 
     @staticmethod
     def _drain(queue):
