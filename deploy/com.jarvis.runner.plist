@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Executor de tarefas do JARVIS no Mac (roda na sessão do usuário, com acesso
+  ao Keychain e à tela). Instalação:
+    cp deploy/com.jarvis.runner.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/com.jarvis.runner.plist
+  O script é COPIADO para ~/.jarvis/ de propósito: o macOS (TCC) não deixa
+  um LaunchAgent ler scripts de dentro de ~/Documents.
+    mkdir -p ~/.jarvis && cp scripts/mac_runner.py ~/.jarvis/
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jarvis.runner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/jvfs/.jarvis/mac_runner.py</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/jarvis-runner.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/jarvis-runner.log</string>
+</dict>
+</plist>

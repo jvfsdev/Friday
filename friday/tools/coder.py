@@ -14,10 +14,11 @@ Trilhos de segurança, sempre:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-import re
-import shlex
 import time
+import uuid
 
 import asyncssh
 
@@ -26,8 +27,6 @@ from . import Tool, ToolContext, truncate
 log = logging.getLogger("friday.coder")
 
 TIMEOUT_AGENTE = 1800  # 30 min
-PATH_MAC = 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH";'
-
 # {tarefa} recebe a tarefa já entre aspas
 AGENTES_PADRAO = {
     "claude": "claude -p {tarefa} --permission-mode acceptEdits",
@@ -35,20 +34,16 @@ AGENTES_PADRAO = {
 }
 
 
-async def _ssh(config, machine: str, comando: str, timeout: int = 120) -> tuple[int, str]:
+async def _ssh(config, machine: str, comando: str, timeout: int = 120,
+               entrada: str | None = None) -> tuple[int, str]:
     spec = config.machines.get(machine)
     if not spec:
         raise RuntimeError(f"máquina '{machine}' não configurada")
     async with asyncssh.connect(
         spec.host, username=spec.user, known_hosts=None, connect_timeout=15
     ) as conn:
-        r = await conn.run(comando, check=False, timeout=timeout)
+        r = await conn.run(comando, check=False, timeout=timeout, input=entrada)
         return r.exit_status or 0, ((r.stdout or "") + (r.stderr or "")).strip()
-
-
-def _slug(texto: str) -> str:
-    limpo = re.sub(r"[^a-z0-9]+", "-", texto.lower())[:32].strip("-")
-    return f"{limpo or 'tarefa'}-{time.strftime('%m%d-%H%M')}"
 
 
 def _agentes(config) -> dict:
@@ -64,58 +59,62 @@ def _ordem(config, agente: str) -> list[str]:
 
 
 async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str) -> str:
-    machine, path = spec["machine"], spec["path"]
-    cd = f"cd {shlex.quote(path)} &&"
+    """Deposita a tarefa para o executor que roda na sessão gráfica do Mac.
 
-    code, saida = await _ssh(config, machine, f"{cd} git rev-parse --is-inside-work-tree")
+    Não chamamos o agente direto por SSH porque o macOS não abre o Keychain
+    do login em sessão não-interativa — e é lá que ficam as credenciais do
+    Claude Code. O executor (LaunchAgent) tem esse acesso e ainda consegue
+    abrir o editor na tela.
+    """
+    machine = spec["machine"]
+    job_id = uuid.uuid4().hex[:10]
+    payload = json.dumps(
+        {"path": spec["path"], "tarefa": tarefa, "agentes": _ordem(config, agente)},
+        ensure_ascii=False,
+    )
+
+    pendente = f"~/.jarvis/jobs/pending/{job_id}.json"
+    pronto = f"~/.jarvis/jobs/done/{job_id}.json"
+    code, saida = await _ssh(
+        config, machine,
+        f"mkdir -p ~/.jarvis/jobs/pending ~/.jarvis/jobs/done && cat > {pendente}",
+        entrada=payload,
+    )
     if code != 0:
-        return f"'{path}' no {machine} não é um repositório git ({saida[:200]})."
+        return f"Não consegui enviar a tarefa para o {machine}: {saida[:300]}"
 
-    code, sujo = await _ssh(config, machine, f"{cd} git status --porcelain")
-    if sujo.strip():
-        return ("O repositório tem alterações não commitadas — não vou misturar meu "
-                f"trabalho com o seu. Resolva e peça de novo:\n{truncate(sujo, 800)}")
-
-    branch = f"jarvis/{_slug(tarefa)}"
-    code, saida = await _ssh(config, machine, f"{cd} git checkout -b {shlex.quote(branch)}")
-    if code != 0:
-        return f"Não consegui criar o branch {branch}: {saida[:300]}"
-
-    base, _ = await _ssh(config, machine, f"{cd} git rev-parse HEAD")
-    tentativas = []
-    for nome in _ordem(config, agente):
-        template = _agentes(config)[nome]
-        comando = template.replace("{tarefa}", shlex.quote(tarefa))
-        log.info("projeto %s: rodando agente %s", projeto, nome)
-        code, saida = await _ssh(
-            config, machine, f"{PATH_MAC} {cd} {comando}", timeout=TIMEOUT_AGENTE
-        )
-        tentativas.append(f"{nome}: código {code}")
-        if code == 0:
-            usado, resposta = nome, saida
+    limite = time.monotonic() + TIMEOUT_AGENTE
+    avisou_executor = False
+    while time.monotonic() < limite:
+        await asyncio.sleep(5)
+        code, conteudo = await _ssh(config, machine, f"cat {pronto} 2>/dev/null")
+        if code == 0 and conteudo.strip():
             break
-        log.warning("agente %s falhou (%s) — tentando o próximo", nome, saida[:200])
+        if not avisou_executor and time.monotonic() > limite - TIMEOUT_AGENTE + 45:
+            avisou_executor = True
+            code_p, _ = await _ssh(config, machine, f"test -f {pendente}")
+            if code_p == 0:
+                log.warning("tarefa parada na fila do %s — executor rodando?", machine)
     else:
-        await _ssh(config, machine, f"{cd} git checkout - && git branch -D {shlex.quote(branch)}")
-        return f"Nenhum agente conseguiu executar ({'; '.join(tentativas) or 'nenhum configurado'})."
+        return (f"A tarefa ficou {TIMEOUT_AGENTE // 60} minutos na fila do {machine} sem "
+                "resposta. O executor do JARVIS está rodando lá? "
+                "(`launchctl list | grep jarvis` no Mac)")
 
-    await _ssh(config, machine, f"{cd} git add -A")
-    mensagem = f"JARVIS: {tarefa[:120]}"
-    await _ssh(config, machine, f"{cd} git commit -m {shlex.quote(mensagem)} --no-verify")
+    await _ssh(config, machine, f"rm -f {pronto}")
+    try:
+        resultado = json.loads(conteudo)
+    except json.JSONDecodeError:
+        return f"Resposta ilegível do executor: {conteudo[:300]}"
 
-    _, diffstat = await _ssh(config, machine, f"{cd} git --no-pager diff --stat {base.strip()}..HEAD")
-    if not diffstat.strip():
-        await _ssh(config, machine, f"{cd} git checkout - && git branch -D {shlex.quote(branch)}")
-        return f"O agente {usado} rodou mas não mudou nenhum arquivo. Resposta dele:\n{truncate(resposta, 1500)}"
-
-    # deixa aberto na tela do Mac para revisão
-    await _ssh(config, machine, f"{PATH_MAC} (code {shlex.quote(path)} || open {shlex.quote(path)}) >/dev/null 2>&1")
+    if not resultado.get("ok"):
+        return f"Não deu certo: {resultado.get('resultado', 'sem detalhes')}"
 
     return (
-        f"Pronto, usei o {usado} no projeto {projeto}.\n"
-        f"Branch: {branch} (commit local, sem push)\n\n"
-        f"{truncate(diffstat, 1500)}\n\n"
-        f"Abri o projeto no Mac para você revisar. Resumo do agente:\n{truncate(resposta, 1200)}"
+        f"Pronto, usei o {resultado.get('agente')} no projeto {projeto}.\n"
+        f"Branch: {resultado.get('branch')} (commit local, sem push)\n\n"
+        f"{truncate(resultado.get('diffstat', ''), 1500)}\n\n"
+        f"Abri o projeto no Mac para você revisar. Resumo do agente:\n"
+        f"{truncate(resultado.get('resultado', ''), 1200)}"
     )
 
 
