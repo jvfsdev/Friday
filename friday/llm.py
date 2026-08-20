@@ -28,11 +28,17 @@ class GeminiPool:
         self._exhausted: dict[tuple[int, str], float] = {}
         # (dia, chave, modelo) -> requisições bem-sucedidas (zera no restart)
         self.usage: dict[tuple[str, int, str], int] = {}
+        # modelos que a API não reconhece (ID errado no config)
+        self._unknown_models: set[str] = set()
 
     def _available(self):
         now = time.time()
         for model in self.models:
             for i, client in enumerate(self.clients):
+                # relido a cada volta: um 404 no meio descarta o modelo na hora,
+                # sem gastar as outras chaves com um ID que não existe.
+                if model in self._unknown_models:
+                    break
                 if self._exhausted.get((i, model), 0) > now:
                     continue
                 yield i, client, model
@@ -65,6 +71,14 @@ class GeminiPool:
                     if exc.code in (500, 503) and attempt == 1:
                         await asyncio.sleep(5)
                         continue
+                    if exc.code == 404:
+                        # ID de modelo que a API não conhece (typo no config.yaml):
+                        # não adianta tentar em outra chave — pula para o próximo
+                        # degrau em vez de derrubar a conversa inteira.
+                        self._unknown_models.add(model)
+                        log.error("modelo '%s' não existe para esta API — "
+                                  "ignorando e usando o próximo da escada", model)
+                        break
                     raise  # erro real (4xx de verdade), não adianta trocar de chave
         if last_exc:
             raise last_exc
