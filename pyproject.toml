@@ -16,6 +16,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2",
     "msal>=1.28",
     "piper-tts>=1.2",
+    "edge-tts>=6.1",
 ]
 
 [project.optional-dependencies]

@@ -1,11 +1,17 @@
-"""A voz do JARVIS: síntese local com Piper (offline, leve, pt-BR).
+"""A voz do JARVIS, com motores plugáveis.
 
-O modelo de voz é baixado uma única vez para state/voices/.
+Medido no servidor (AMD E-300, sem AVX/SSE4.2), por frase:
+  edge   ~1,4s  neural, natural, precisa de internet
+  espeak ~0,2s  robótica, offline, instantânea
+  piper  ~13s   natural e offline, mas inviável nesse CPU (inferência
+                neural sem instruções vetoriais); mantida para máquinas
+                melhores e como último recurso
 
-Para a sala, o caminho que importa é `speak_streaming`: ele divide a resposta
-em frases e começa a falar a primeira enquanto ainda sintetiza as seguintes.
-Sem isso, o chefe espera a síntese do texto inteiro antes de ouvir a primeira
-palavra — o que num notebook de 2011 são vários segundos.
+`auto` (padrão) usa edge e cai para espeak se a rede falhar — o chefe nunca
+fica sem resposta falada.
+
+Para a sala o que importa é `speak_streaming`: divide a resposta em frases e
+começa a falar a primeira enquanto sintetiza as seguintes.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from .config import ROOT
 log = logging.getLogger("friday.tts")
 
 DEFAULT_VOICE = "pt_BR-faber-medium"
+DEFAULT_EDGE_VOICE = "pt-BR-AntonioNeural"
 VOICES_DIR = ROOT / "state" / "voices"
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
@@ -38,11 +45,64 @@ _voice_cache: dict[str, object] = {}
 
 
 def available() -> bool:
+    """Há algum motor de voz utilizável nesta máquina?"""
+    if shutil.which("espeak-ng") or shutil.which("espeak"):
+        return True
     try:
         import piper  # noqa: F401
     except ImportError:
         return False
     return shutil.which("ffmpeg") is not None
+
+
+def _settings() -> dict:
+    from .config import load_config
+
+    try:
+        return load_config().voice_settings or {}
+    except Exception:
+        return {}
+
+
+def backend() -> str:
+    return _settings().get("tts_backend", "auto")
+
+
+def _edge_voice() -> str:
+    return _settings().get("edge_voice", DEFAULT_EDGE_VOICE)
+
+
+async def _run(*args) -> int:
+    proc = await asyncio.create_subprocess_exec(
+        *args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    )
+    return await proc.wait()
+
+
+async def _espeak_wav(text: str) -> Path:
+    binario = shutil.which("espeak-ng") or shutil.which("espeak")
+    if not binario:
+        raise RuntimeError("espeak-ng não instalado")
+    out = Path(tempfile.mkstemp(suffix=".wav", prefix="jarvis_voz_")[1])
+    velocidade = str(_settings().get("espeak_speed", 165))
+    if await _run(binario, "-v", "pt-br", "-s", velocidade, "-w", str(out), text) != 0:
+        out.unlink(missing_ok=True)
+        raise RuntimeError("espeak falhou")
+    return out
+
+
+async def _edge_wav(text: str) -> Path:
+    import edge_tts
+
+    mp3 = Path(tempfile.mkstemp(suffix=".mp3", prefix="jarvis_voz_")[1])
+    try:
+        await edge_tts.Communicate(text, _edge_voice()).save(str(mp3))
+        wav = mp3.with_suffix(".wav")
+        if await _run("ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3), str(wav)) != 0:
+            raise RuntimeError("ffmpeg falhou ao converter a voz da nuvem")
+        return wav
+    finally:
+        mp3.unlink(missing_ok=True)
 
 
 def voice_id() -> str:
@@ -98,7 +158,22 @@ def _synthesize_sync(text: str, voice: str) -> Path:
 
 
 async def synthesize_wav(text: str, voice: str | None = None) -> Path:
-    return await asyncio.to_thread(_synthesize_sync, text, voice or voice_id())
+    """Sintetiza uma frase com o motor configurado (com reserva automática)."""
+    motor = backend()
+    if voice:  # voz explícita = Piper (usada em comparações)
+        return await asyncio.to_thread(_synthesize_sync, text, voice)
+
+    if motor in ("auto", "edge"):
+        try:
+            return await _edge_wav(text)
+        except Exception as exc:
+            if motor == "edge":
+                raise
+            log.warning("voz da nuvem indisponível (%s) — usando espeak", type(exc).__name__)
+            return await _espeak_wav(text)
+    if motor == "espeak":
+        return await _espeak_wav(text)
+    return await asyncio.to_thread(_synthesize_sync, text, voice_id())
 
 
 async def synthesize_ogg(text: str, voice: str | None = None) -> Path:
@@ -158,7 +233,6 @@ async def play(path: Path):
 
 async def speak_streaming(text: str, voice: str | None = None, on_first_word=None):
     """Fala em pipeline: sintetiza a próxima frase enquanto toca a atual."""
-    voice = voice or voice_id()
     frases = split_sentences(text)
     if not frases:
         return
@@ -168,7 +242,7 @@ async def speak_streaming(text: str, voice: str | None = None, on_first_word=Non
     async def produtor():
         for frase in frases:
             try:
-                caminho = await asyncio.to_thread(_synthesize_sync, frase, voice)
+                caminho = await synthesize_wav(frase, voice)
             except Exception:
                 log.exception("falha ao sintetizar trecho")
                 continue

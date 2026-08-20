@@ -22,7 +22,12 @@ voice:
   enabled: true
   wake_threshold: 0.5          # sensibilidade da wake word (0-1)
   silence_seconds: 0.9         # silêncio que encerra a fala
-  # piper_voice: pt_BR-faber-medium   # voz da Piper (-low = mais rápida)
+  # Motor de voz: auto (nuvem, cai para espeak sem internet) | edge | espeak | piper
+  # No servidor antigo: edge ~1,4s por frase, espeak ~0,2s, piper ~13s (inviável)
+  tts_backend: auto
+  # edge_voice: pt-BR-AntonioNeural    # vozes: ...AntonioNeural, ...FranciscaNeural
+  # espeak_speed: 165                  # palavras por minuto da voz reserva
+  # piper_voice: pt_BR-faber-medium
   # input_device: null         # dispositivo de captura (padrão do sistema)
 
 # Máquinas que a Friday pode controlar por SSH.
