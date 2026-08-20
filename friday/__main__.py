@@ -145,6 +145,33 @@ async def run_telegram(config):
         handler=_escalate,
     )
 
+    if phone.disponivel():
+        async def _ligar(tool_ctx, motivo: str) -> str:
+            await phone.ligar(motivo)
+            return "Estou ligando para o chefe agora. Não repita a ligação."
+
+        tools["phone_call"] = Tool(
+            declaration={
+                "name": "phone_call",
+                "description": (
+                    "Liga para o telefone do chefe e conversa por voz. Use quando ele "
+                    "pedir uma ligação ou quando precisar de uma decisão urgente que "
+                    "não pode esperar o Telegram."
+                ),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "motivo": {
+                            "type": "STRING",
+                            "description": "Contexto completo do que você vai falar e perguntar.",
+                        }
+                    },
+                    "required": ["motivo"],
+                },
+            },
+            handler=_ligar,
+        )
+
     if config.public_url or config.intake_token:
         from .web import WebServer
 
