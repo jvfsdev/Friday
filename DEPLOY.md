@@ -305,10 +305,12 @@ Ative **Ajustes → Geral → Compartilhamento → Sessão Remota** e autorize a
 chave do servidor (`ssh-copy-id`). Confira o executor com
 `launchctl list | grep jarvis` e o log em `/tmp/jarvis-runner.log`.
 
-⚠️ **Permissão do macOS**: se os seus repositórios ficam em `~/Documents`,
-conceda **Acesso Total ao Disco** ao `/usr/bin/python3` em Ajustes →
-Privacidade e Segurança — senão o executor é bloqueado pelo sistema ao tocar
-essa pasta. (Repositórios fora de Documents/Desktop/Downloads não precisam.)
+⚠️ **Detalhe do macOS**: o script precisa morar em `~/.jarvis/` (e não dentro
+de `~/Documents`) porque o launchd é bloqueado pela proteção de privacidade ao
+carregar programas de pastas protegidas. Já rodando de lá, ele trabalha
+normalmente em repositórios dentro de `~/Documents` — testado. Se algum dia
+aparecer `Operation not permitted`, conceda **Acesso Total ao Disco** ao
+`/usr/bin/python3` em Ajustes → Privacidade e Segurança.
 
 No `config.yaml` do servidor, declare a lista fechada `code_projects:`
 (exemplo no config.example.yaml). Teste: "JARVIS, no projeto X, adicione ...".
