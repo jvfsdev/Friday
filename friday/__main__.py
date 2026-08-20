@@ -10,6 +10,7 @@ import sys
 from .brain import Brain
 from .config import load_config
 from .monitor import FridayMonitor
+from .net import prefer_ipv4_if_needed
 from .scheduler import FridayScheduler
 from .tools import ToolContext, build_tools
 
@@ -111,6 +112,7 @@ def main():
     parser.add_argument("--cli", action="store_true", help="chat no terminal (modo de teste)")
     args = parser.parse_args()
 
+    prefer_ipv4_if_needed()
     config = load_config()
     if not config.gemini_api_key:
         sys.exit(
