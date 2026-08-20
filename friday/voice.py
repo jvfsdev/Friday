@@ -104,6 +104,9 @@ class VoiceLoop:
             samplerate=RATE, blocksize=CHUNK, dtype="int16", channels=1,
             device=self.input_device, callback=on_audio,
         )
+        from . import tts
+
+        await tts.warmup()  # paga import e handshake antes da 1a conversa
         log.info("ouvindo a sala (wake word: hey jarvis)")
         piso_ruido = 0.0  # média móvel do RMS ambiente, medida em repouso
         with stream:

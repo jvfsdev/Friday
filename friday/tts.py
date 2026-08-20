@@ -91,18 +91,25 @@ async def _espeak_wav(text: str) -> Path:
     return out
 
 
-async def _edge_wav(text: str) -> Path:
+async def _edge_audio(text: str) -> Path:
+    """Devolve o MP3 da nuvem sem converter — a conversão custava 1,1s no
+    servidor antigo, quase o mesmo que a própria requisição de rede."""
     import edge_tts
 
     mp3 = Path(tempfile.mkstemp(suffix=".mp3", prefix="jarvis_voz_")[1])
-    try:
-        await edge_tts.Communicate(text, _edge_voice()).save(str(mp3))
-        wav = mp3.with_suffix(".wav")
-        if await _run("ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3), str(wav)) != 0:
-            raise RuntimeError("ffmpeg falhou ao converter a voz da nuvem")
-        return wav
-    finally:
-        mp3.unlink(missing_ok=True)
+    await edge_tts.Communicate(text, _edge_voice()).save(str(mp3))
+    return mp3
+
+
+async def warmup():
+    """Paga o import e o primeiro handshake fora da conversa."""
+    if backend() in ("auto", "edge"):
+        try:
+            audio = await _edge_audio("Pronto.")
+            audio.unlink(missing_ok=True)
+            log.info("voz da nuvem aquecida")
+        except Exception as exc:
+            log.warning("não consegui aquecer a voz da nuvem: %s", type(exc).__name__)
 
 
 def voice_id() -> str:
@@ -157,15 +164,16 @@ def _synthesize_sync(text: str, voice: str) -> Path:
     return out
 
 
-async def synthesize_wav(text: str, voice: str | None = None) -> Path:
-    """Sintetiza uma frase com o motor configurado (com reserva automática)."""
+async def synthesize(text: str, voice: str | None = None) -> Path:
+    """Sintetiza uma frase com o motor configurado (mp3 ou wav, conforme o
+    motor) — use `play` para tocar sem se preocupar com o formato."""
     motor = backend()
     if voice:  # voz explícita = Piper (usada em comparações)
         return await asyncio.to_thread(_synthesize_sync, text, voice)
 
     if motor in ("auto", "edge"):
         try:
-            return await _edge_wav(text)
+            return await _edge_audio(text)
         except Exception as exc:
             if motor == "edge":
                 raise
@@ -176,9 +184,13 @@ async def synthesize_wav(text: str, voice: str | None = None) -> Path:
     return await asyncio.to_thread(_synthesize_sync, text, voice_id())
 
 
+# compatibilidade com chamadas antigas
+synthesize_wav = synthesize
+
+
 async def synthesize_ogg(text: str, voice: str | None = None) -> Path:
     """Gera OGG/Opus — formato de mensagem de voz do Telegram."""
-    wav = await synthesize_wav(text, voice)
+    wav = await synthesize(text, voice)
     ogg = wav.with_suffix(".ogg")
     proc = await asyncio.create_subprocess_exec(
         "ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
@@ -221,10 +233,19 @@ def split_sentences(text: str) -> list[str]:
 
 
 async def play(path: Path):
-    """Toca um arquivo de áudio localmente (CLI/alto-falantes)."""
-    player = ["afplay", str(path)] if sys.platform == "darwin" else ["aplay", "-q", str(path)]
-    if sys.platform != "darwin" and shutil.which("paplay"):
+    """Toca um arquivo de áudio localmente, wav ou mp3."""
+    if sys.platform == "darwin":
+        player = ["afplay", str(path)]
+    elif path.suffix == ".mp3":
+        binario = shutil.which("mpg123") or shutil.which("ffplay")
+        if not binario:
+            raise RuntimeError("instale mpg123 para tocar áudio da nuvem")
+        player = ([binario, "-q", str(path)] if binario.endswith("mpg123")
+                  else [binario, "-nodisp", "-autoexit", "-loglevel", "quiet", str(path)])
+    elif shutil.which("paplay"):
         player = ["paplay", str(path)]
+    else:
+        player = ["aplay", "-q", str(path)]
     proc = await asyncio.create_subprocess_exec(
         *player, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
@@ -242,7 +263,7 @@ async def speak_streaming(text: str, voice: str | None = None, on_first_word=Non
     async def produtor():
         for frase in frases:
             try:
-                caminho = await synthesize_wav(frase, voice)
+                caminho = await synthesize(frase, voice)
             except Exception:
                 log.exception("falha ao sintetizar trecho")
                 continue
