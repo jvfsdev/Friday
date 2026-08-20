@@ -123,6 +123,10 @@ def build_tools(config: "Config") -> dict[str, Tool]:
         add(browser.SCREENSHOT_TOOL)
 
     if google_workspace.has_credentials():
+        from . import drive
+
+        add(drive.SEARCH_TOOL)
+        add(drive.READ_TOOL)
         add(google_workspace.LIST_EMAILS_TOOL)
         add(google_workspace.READ_EMAIL_TOOL)
         add(google_workspace.SEND_EMAIL_TOOL)

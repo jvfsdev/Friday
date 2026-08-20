@@ -70,6 +70,60 @@ async def _check_ping(params: dict) -> tuple[bool, str]:
 CHECKS = {"disk": _check_disk, "command": _check_command, "ping": _check_ping}
 
 
+class _DriveFolderCheck:
+    """Dispara quando aparece arquivo novo numa pasta do Drive.
+
+    params: folder_id, account (opcional), prompt (opcional).
+    Os ids já vistos ficam em state/ — na primeira execução ele apenas
+    memoriza o que já existe, para não despejar a pasta inteira no chefe.
+    """
+
+    def __init__(self, config: Config):
+        self.config = config
+
+    def _arquivo_estado(self, nome: str):
+        from .config import ROOT
+
+        return ROOT / "state" / f"drive_seen_{nome}.json"
+
+    async def __call__(self, params: dict) -> tuple[bool, str]:
+        import json
+
+        from .tools.google_workspace import _pick_one, _service
+
+        conta = _pick_one(params.get("account", ""))
+        if not conta:
+            return False, "monitor do Drive precisa de 'account' quando há várias contas"
+
+        def listar():
+            drive = _service("drive", "v3", conta)
+            resp = drive.files().list(
+                q=f"'{params['folder_id']}' in parents and trashed = false",
+                fields="files(id,name,mimeType)",
+                pageSize=50,
+                orderBy="createdTime desc",
+            ).execute()
+            return resp.get("files", [])
+
+        arquivos = await asyncio.to_thread(listar)
+        caminho = self._arquivo_estado(params.get("_nome", "pasta"))
+        try:
+            vistos = set(json.loads(caminho.read_text(encoding="utf-8")))
+            primeira_vez = False
+        except (OSError, json.JSONDecodeError):
+            vistos, primeira_vez = set(), True
+
+        atuais = {f["id"] for f in arquivos}
+        novos = [f for f in arquivos if f["id"] not in vistos]
+        caminho.parent.mkdir(exist_ok=True)
+        caminho.write_text(json.dumps(sorted(atuais)), encoding="utf-8")
+
+        if primeira_vez or not novos:
+            return False, f"{len(arquivos)} arquivo(s) na pasta, nenhum novo"
+        descricao = "; ".join(f"{f['name']} (id: {f['id']}, conta {conta})" for f in novos[:5])
+        return True, f"arquivo(s) novo(s) no Drive: {descricao}"
+
+
 class _HaStateCheck:
     """Dispara quando uma entidade do Home Assistant entra no estado configurado.
 
@@ -113,6 +167,11 @@ class FridayMonitor:
         self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
 
     def _check_for(self, spec: MonitorSpec):
+        if spec.check == "drive_folder":
+            spec.params.setdefault("_nome", spec.name)
+            if spec.name not in self._checks:
+                self._checks[spec.name] = _DriveFolderCheck(self.config)
+            return self._checks[spec.name]
         if spec.check == "ha_state":
             if not self.config.ha_token:
                 return None
