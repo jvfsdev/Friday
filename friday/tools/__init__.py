@@ -32,6 +32,8 @@ class ToolContext:
     llm: Any = None
     # Envia áudio falado ao chefe (voice note no Telegram); None se não houver.
     send_voice: Callable[[str], Awaitable[None]] | None = None
+    # Registro de trabalhos longos (tarefas de código, pipelines).
+    jobs: Any = None
 
 
 @dataclass
@@ -107,6 +109,11 @@ def build_tools(config: "Config") -> dict[str, Tool]:
 
     if config.machines:
         add(remote.RUN_ON_TOOL)
+        if config.code_projects:
+            from . import coder
+
+            add(coder.CODAR_TOOL)
+            add(coder.STATUS_TOOL)
         if any(m.mac_address for m in config.machines.values()):
             add(remote.WAKE_TOOL)
 

@@ -59,6 +59,9 @@ class Config:
     voice_enabled: bool = False        # voz na sala (mic/alto-falante locais)
     voice_settings: dict = field(default_factory=dict)
     mcp_servers: dict = field(default_factory=dict)  # servidores MCP plugáveis
+    code_projects: dict = field(default_factory=dict)   # lista fechada p/ o agente
+    code_agents: dict = field(default_factory=dict)     # nome -> comando
+    code_agent_order: list = field(default_factory=list)
     machines: dict[str, Machine] = field(default_factory=dict)
     routines: list[Routine] = field(default_factory=list)
     monitors: list[MonitorSpec] = field(default_factory=list)
@@ -139,4 +142,7 @@ def load_config() -> Config:
         voice_enabled=bool((raw.get("voice") or {}).get("enabled", False)),
         voice_settings=raw.get("voice") or {},
         mcp_servers=raw.get("mcp_servers") or {},
+        code_projects=raw.get("code_projects") or {},
+        code_agents=(raw.get("code") or {}).get("agents") or {},
+        code_agent_order=(raw.get("code") or {}).get("order") or [],
     )

@@ -101,6 +101,20 @@ routines:
   #   only_if: {entity: person.joao, state: home}
   #   prompt: Como está o trânsito daqui para o trabalho agora?
 
+# Projetos que o agente de código pode tocar (LISTA FECHADA — ele recusa
+# qualquer projeto fora daqui). Sempre trabalha em branch novo, nunca dá push.
+# code_projects:
+#   friday:
+#     machine: mac
+#     path: /Users/jvfs/Documents/repos/Friday
+
+# Agentes de código disponíveis no Mac e a ordem de preferência.
+# code:
+#   order: [claude, antigravity]
+#   agents:                      # sobrescreve os padrões se precisar
+#     claude: claude -p {tarefa} --permission-mode acceptEdits
+#     antigravity: agy -p {tarefa} --mode accept-edits
+
 # Servidores MCP plugáveis: qualquer servidor Model Context Protocol vira
 # ferramenta do JARVIS (requer: pip install -e ".[mcp]"). Segredos ficam no
 # .env — o servidor filho herda o ambiente do JARVIS automaticamente.

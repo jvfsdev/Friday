@@ -38,7 +38,10 @@ async def run_cli(config):
     from .llm import GeminiPool
     from .notifier import Notifier
 
-    ctx = ToolContext(config=config, confirm=confirm, send=send, llm=GeminiPool(config))
+    from .jobs import JobRegistry
+
+    jobs = JobRegistry(notify=send)
+    ctx = ToolContext(config=config, confirm=confirm, send=send, llm=GeminiPool(config), jobs=jobs)
     tools = build_tools(config)
     if config.mcp_servers:
         from .mcp_bridge import McpBridge
@@ -79,10 +82,13 @@ async def run_telegram(config):
     from .llm import GeminiPool
     from .notifier import Notifier
 
+    from .jobs import JobRegistry
+
     interface = TelegramInterface(config)
+    jobs = JobRegistry(notify=interface.send)
     ctx = ToolContext(
         config=config, confirm=interface.confirm, send=interface.send,
-        llm=GeminiPool(config), send_voice=interface.send_voice,
+        llm=GeminiPool(config), send_voice=interface.send_voice, jobs=jobs,
     )
     tools = build_tools(config)
     if config.mcp_servers:
