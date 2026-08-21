@@ -14,10 +14,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from friday.tools.google_workspace import _service, accounts  # noqa: E402
+from friday.tools.google_workspace import _service, accounts, token_file  # noqa: E402
 
 PASTA = "JARVIS Backups"
 MANTER_PADRAO = 3
+ESCOPO_ESCRITA = "drive.file"
+
+
+def _conta_que_pode_subir(preferida: str = "") -> str:
+    """Nem toda conta conectada autorizou escrita no Drive — escolher a
+    primeira da lista subiria o backup para uma conta sem permissão e o erro
+    só apareceria no cron de domingo."""
+    if preferida:
+        return preferida
+    for nome in accounts():
+        try:
+            if ESCOPO_ESCRITA in token_file(nome).read_text(encoding="utf-8"):
+                return nome
+        except OSError:
+            continue
+    return ""
 
 
 def _pasta_id(drive) -> str:
@@ -49,10 +65,16 @@ def main():
     if "--manter" in sys.argv:
         manter = int(sys.argv[sys.argv.index("--manter") + 1])
 
-    contas = accounts()
-    if not contas:
-        sys.exit("nenhuma conta Google conectada (rode scripts/google_auth.py)")
-    conta = contas[0]
+    preferida = ""
+    if "--conta" in sys.argv:
+        preferida = sys.argv[sys.argv.index("--conta") + 1]
+    conta = _conta_que_pode_subir(preferida)
+    if not conta:
+        sys.exit(
+            "nenhuma conta Google autorizou escrita no Drive. Rode:\n"
+            "  .venv/bin/python scripts/google_auth.py <conta>\n"
+            f"contas conectadas: {', '.join(accounts()) or 'nenhuma'}"
+        )
 
     drive = _service("drive", "v3", conta)
     pasta = _pasta_id(drive)
