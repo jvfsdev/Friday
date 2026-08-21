@@ -22,6 +22,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/drive.readonly",
+    # drive.file: o app só enxerga e gerencia o que ELE criou — é o que
+    # permite subir e podar os backups sem poder tocar no resto do Drive.
+    "https://www.googleapis.com/auth/drive.file",
 ]
 
 
