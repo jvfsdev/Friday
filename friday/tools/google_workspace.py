@@ -221,13 +221,19 @@ async def _send_email(ctx: ToolContext, to: str, subject: str, body: str, accoun
     name = _pick_one(account)
     if not name:
         return NEED_ONE.format(", ".join(accounts()))
-    preview = body if len(body) <= 800 else body[:800] + "…"
-    ok = await ctx.confirm(
-        f"Enviar email pela conta Google '{name}'?\n\n"
-        f"Para: {to}\nAssunto: {subject}\n\n{preview}"
-    )
-    if not ok:
-        return "Envio cancelado pelo chefe."
+    # Mandar para si mesmo é o chefe movendo informação dele para a caixa
+    # dele — confirmar isso só treina o dedo a apertar "sim" sem ler, o que
+    # enfraquece a confirmação que importa (email para terceiro).
+    from ..identidade import e_do_chefe
+
+    if not e_do_chefe(to):
+        preview = body if len(body) <= 800 else body[:800] + "…"
+        ok = await ctx.confirm(
+            f"Enviar email pela conta Google '{name}'?\n\n"
+            f"Para: {to}\nAssunto: {subject}\n\n{preview}"
+        )
+        if not ok:
+            return "Envio cancelado pelo chefe."
     return await asyncio.to_thread(_send_email_sync, name, to, subject, body)
 
 
@@ -291,8 +297,9 @@ SEND_EMAIL_TOOL = Tool(
     declaration={
         "name": "send_email",
         "description": (
-            "Envia um email pelo Gmail do chefe. O sistema SEMPRE pede confirmação "
-            "dele antes de enviar — escreva o email completo e chame a ferramenta."
+            "Envia um email pelo Gmail do chefe. Para terceiros o sistema pede a "
+            "confirmação dele antes de enviar; quando o destinatário é um endereço "
+            "do próprio chefe, vai direto. Escreva o email completo e chame a ferramenta."
         ),
         "parameters": {
             "type": "OBJECT",

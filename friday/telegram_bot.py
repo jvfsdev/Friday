@@ -71,6 +71,16 @@ class TelegramInterface:
         except TelegramError:
             await self.app.bot.send_message(text=chunk, **kwargs)
 
+    async def send_file(self, nome: str, dados: bytes, legenda: str = ""):
+        import io
+
+        arquivo = io.BytesIO(dados)
+        arquivo.name = nome
+        await self.app.bot.send_document(
+            chat_id=self.config.telegram_user_id, document=arquivo,
+            filename=nome, caption=legenda[:1000] or None,
+        )
+
     async def send_voice(self, text: str):
         from . import tts
 

@@ -149,13 +149,16 @@ async def _send_email(ctx: ToolContext, to: str, subject: str, body: str, accoun
         return f"Há mais de uma conta Microsoft ({', '.join(available)}). Diga qual delas."
     if name not in available:
         return f"Conta Microsoft '{name}' não existe. Contas: {', '.join(available)}."
-    preview = body if len(body) <= 800 else body[:800] + "…"
-    ok = await ctx.confirm(
-        f"Enviar email pela conta Microsoft '{name}'?\n\n"
-        f"Para: {to}\nAssunto: {subject}\n\n{preview}"
-    )
-    if not ok:
-        return "Envio cancelado pelo chefe."
+    from ..identidade import e_do_chefe
+
+    if not e_do_chefe(to):   # ver a nota em google_workspace._send_email
+        preview = body if len(body) <= 800 else body[:800] + "…"
+        ok = await ctx.confirm(
+            f"Enviar email pela conta Microsoft '{name}'?\n\n"
+            f"Para: {to}\nAssunto: {subject}\n\n{preview}"
+        )
+        if not ok:
+            return "Envio cancelado pelo chefe."
     payload = {
         "message": {
             "subject": subject,
@@ -173,8 +176,8 @@ SEND_TOOL = Tool(
     declaration={
         "name": "outlook_send_email",
         "description": (
-            "Envia um email pela conta Microsoft (@hotmail/@outlook) do chefe. O sistema "
-            "SEMPRE pede confirmação dele antes de enviar."
+            "Envia um email pela conta Microsoft (@hotmail/@outlook) do chefe. Para "
+            "terceiros o sistema pede confirmação; para o próprio chefe, vai direto."
         ),
         "parameters": {
             "type": "OBJECT",

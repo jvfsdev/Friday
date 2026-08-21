@@ -92,6 +92,7 @@ async def run_telegram(config):
     ctx = ToolContext(
         config=config, confirm=interface.confirm, send=interface.send,
         llm=GeminiPool(config), send_voice=interface.send_voice, jobs=jobs,
+        send_file=interface.send_file,
     )
     tools = build_tools(config)
     if config.mcp_servers:

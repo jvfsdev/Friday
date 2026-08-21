@@ -36,6 +36,8 @@ class ToolContext:
     jobs: Any = None
     # Motor de monitores, para o JARVIS criar e remover os próprios vigias.
     monitor: Any = None
+    # Envia um arquivo ao chefe: (nome, bytes, legenda) -> None
+    send_file: Callable[..., Awaitable[None]] | None = None
 
 
 @dataclass
@@ -67,9 +69,10 @@ def build_tools(config: "Config") -> dict[str, Tool]:
     add(shell.TOOL)
     add(maintenance.TOOL)
 
-    from . import documents, modo, monitores, speak
+    from . import arquivos, documents, modo, monitores, speak
 
     add(speak.TOOL)
+    add(arquivos.TOOL)
     add(documents.TOOL)
     add(modo.LIGAR_TOOL)
     add(modo.DESLIGAR_TOOL)
