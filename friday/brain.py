@@ -16,7 +16,12 @@ from .tools import Tool, ToolContext, ToolMedia
 
 log = logging.getLogger("friday.brain")
 
-MAX_TOOL_ROUNDS = 12
+# Teto alto de propósito: com dezenas de ferramentas (MCP, Drive, casa,
+# finanças) uma tarefa legítima encadeia muita chamada. O teto existe só para
+# impedir laço infinito queimando cota — não para interromper trabalho de
+# verdade. Ao encostar nele, o JARVIS conclui com o que já tem em vez de
+# devolver um erro (ver _concluir_sem_ferramentas).
+MAX_TOOL_ROUNDS = 60
 
 
 class Brain:
@@ -110,7 +115,29 @@ class Brain:
                 types.Content(role="user", parts=response_parts + media_parts)
             )
 
-        return "Rodei ferramentas demais numa tarefa só e parei por segurança. Reformula o pedido?"
+        log.warning("teto de %d rodadas de ferramenta atingido — concluindo", MAX_TOOL_ROUNDS)
+        return await self._concluir_sem_ferramentas()
+
+    async def _concluir_sem_ferramentas(self) -> str:
+        """Última palavra sem ferramentas: melhor uma resposta com o que já foi
+        levantado do que um pedido para o chefe reformular."""
+        self.history.append(
+            types.Content(
+                role="user",
+                parts=[types.Part(text=(
+                    "[Você já usou muitas ferramentas nesta tarefa. Responda AGORA, "
+                    "sem chamar mais nenhuma, com o que já levantou. Se algo ficou "
+                    "incompleto, diga o que falta.]"
+                ))],
+            )
+        )
+        resposta = await self.llm.generate(
+            self.history,
+            types.GenerateContentConfig(system_instruction=self._system_prompt()),
+        )
+        texto = (resposta.text or "").strip()
+        self.history.append(types.Content(role="model", parts=[types.Part(text=texto)]))
+        return texto or "Trabalhei bastante nisso mas não consegui fechar uma resposta."
 
     async def _generate(self, gen_config: types.GenerateContentConfig):
         # A escada de chaves × modelos (retries, cotas, fallback) mora no pool.
