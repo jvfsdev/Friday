@@ -27,11 +27,10 @@ from . import Tool, ToolContext, truncate
 log = logging.getLogger("friday.coder")
 
 TIMEOUT_AGENTE = 1800  # 30 min
-# {tarefa} recebe a tarefa já entre aspas
-AGENTES_PADRAO = {
-    "claude": "claude -p {tarefa} --permission-mode acceptEdits",
-    "antigravity": "agy -p {tarefa} --mode accept-edits",
-}
+# Só os NOMES: o comando de cada agente vive em scripts/mac_runner.py, que é
+# quem roda de fato (com as permissões e o --continue). Declarar comando aqui
+# seria configuração que não faz nada — e pior, que engana quem lê.
+AGENTES_PADRAO = ("claude", "antigravity")
 
 
 async def _ssh(config, machine: str, comando: str, timeout: int = 120,
@@ -46,8 +45,8 @@ async def _ssh(config, machine: str, comando: str, timeout: int = 120,
         return r.exit_status or 0, ((r.stdout or "") + (r.stderr or "")).strip()
 
 
-def _agentes(config) -> dict:
-    return {**AGENTES_PADRAO, **(config.code_agents or {})}
+def _agentes(config) -> tuple:
+    return AGENTES_PADRAO
 
 
 def _ordem(config, agente: str) -> list[str]:
@@ -56,6 +55,7 @@ def _ordem(config, agente: str) -> list[str]:
         return [agente] if agente in disponiveis else []
     preferencia = config.code_agent_order or list(AGENTES_PADRAO)
     return [a for a in preferencia if a in disponiveis]
+
 
 
 async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str,

@@ -60,7 +60,6 @@ class Config:
     voice_settings: dict = field(default_factory=dict)
     mcp_servers: dict = field(default_factory=dict)  # servidores MCP plugáveis
     code_projects: dict = field(default_factory=dict)   # lista fechada p/ o agente
-    code_agents: dict = field(default_factory=dict)     # nome -> comando
     code_agent_order: list = field(default_factory=list)
     # Servidor web interno (webhooks da Twilio e do sistema de suporte)
     web_port: int = 8765
@@ -152,7 +151,6 @@ def load_config() -> Config:
         voice_settings=raw.get("voice") or {},
         mcp_servers=raw.get("mcp_servers") or {},
         code_projects=raw.get("code_projects") or {},
-        code_agents=(raw.get("code") or {}).get("agents") or {},
         code_agent_order=(raw.get("code") or {}).get("order") or [],
         web_port=int((raw.get("web") or {}).get("port", 8765)),
         public_url=str((raw.get("web") or {}).get("public_url", "") or "").rstrip("/"),
