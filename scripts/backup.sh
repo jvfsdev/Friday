@@ -36,10 +36,16 @@ if [ -d "$HOME/homeassistant" ]; then
     [ -e "$y" ] && EXTRAS="$EXTRAS homeassistant/$(basename "$y")"
   done
 fi
-if [ -n "$EXTRAS" ]; then
-  # shellcheck disable=SC2086
-  tar -rf "$TAR" -C "$HOME" $EXTRAS
-fi
+# O Home Assistant roda como root e seus arquivos não são legíveis pelo
+# usuário do JARVIS. Em vez de falhar o backup inteiro por causa disso,
+# avisamos e seguimos: o núcleo (tokens, memória, config) é o essencial.
+FALTOU=""
+for extra in $EXTRAS; do
+  if tar -rf "$TAR" -C "$HOME" "$extra" 2>/dev/null; then
+    continue
+  fi
+  FALTOU="$FALTOU $extra"
+done
 
 gzip -f "$TAR"
 
@@ -49,3 +55,7 @@ ls -1t "$DEST"/jarvis-backup-*.tar.gz 2>/dev/null | tail -n +8 | while read -r v
 done
 
 echo "backup ok: $ARQ ($(du -h "$ARQ" | cut -f1))"
+if [ -n "$FALTOU" ]; then
+  echo "AVISO: sem permissão para ler:$FALTOU" >&2
+  echo "       (rode como root para incluir — veja DEPLOY.md)" >&2
+fi
