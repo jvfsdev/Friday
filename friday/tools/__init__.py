@@ -34,6 +34,8 @@ class ToolContext:
     send_voice: Callable[[str], Awaitable[None]] | None = None
     # Registro de trabalhos longos (tarefas de código, pipelines).
     jobs: Any = None
+    # Motor de monitores, para o JARVIS criar e remover os próprios vigias.
+    monitor: Any = None
 
 
 @dataclass
@@ -65,10 +67,16 @@ def build_tools(config: "Config") -> dict[str, Tool]:
     add(shell.TOOL)
     add(maintenance.TOOL)
 
-    from . import documents, speak
+    from . import documents, modo, monitores, speak
 
     add(speak.TOOL)
     add(documents.TOOL)
+    add(modo.LIGAR_TOOL)
+    add(modo.DESLIGAR_TOOL)
+    add(modo.SITUACAO_TOOL)
+    add(monitores.CRIAR_TOOL)
+    add(monitores.LISTAR_TOOL)
+    add(monitores.REMOVER_TOOL)
 
     async def _usage(ctx: "ToolContext") -> str:
         if not ctx.llm:

@@ -228,6 +228,90 @@ class FridayMonitor:
         self.pipelines = pipelines or {}
         self._state: dict[str, bool] = {}
         self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
+        self.dinamicos: dict[str, MonitorSpec] = {}
+
+    # ---- monitores que o próprio JARVIS cria ----
+
+    @staticmethod
+    def _arquivo_dinamicos():
+        from .config import ROOT
+
+        return ROOT / "state" / "monitores_dinamicos.json"
+
+    def _salvar_dinamicos(self):
+        import json
+
+        caminho = self._arquivo_dinamicos()
+        caminho.parent.mkdir(exist_ok=True)
+        caminho.write_text(json.dumps(
+            {n: {"check": s.check, "interval_minutes": s.interval_minutes, "params": s.params}
+             for n, s in self.dinamicos.items()},
+            ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def _carregar_dinamicos(self):
+        import json
+
+        try:
+            dados = json.loads(self._arquivo_dinamicos().read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        for nome, spec in dados.items():
+            try:
+                self.adicionar(MonitorSpec(name=nome, check=spec["check"],
+                                           interval_minutes=int(spec["interval_minutes"]),
+                                           params=spec["params"]), persistir=False)
+            except Exception:
+                log.exception("monitor dinâmico '%s' não pôde ser restaurado", nome)
+
+    def adicionar(self, spec: MonitorSpec, persistir: bool = True) -> str:
+        """Agenda um monitor agora, sem reiniciar o serviço."""
+        if self._check_for(spec) is None:
+            return f"tipo de monitor '{spec.check}' não existe ou depende de algo não configurado"
+        if spec.name in self.dinamicos or any(m.name == spec.name for m in self.config.monitors):
+            return f"já existe um monitor chamado '{spec.name}'"
+        self.scheduler.add_job(
+            self._run, "interval", minutes=spec.interval_minutes,
+            args=[spec], id=f"monitor-{spec.name}", replace_existing=True,
+        )
+        self.dinamicos[spec.name] = spec
+        if persistir:
+            self._salvar_dinamicos()
+        log.info("monitor dinâmico '%s' criado (%s, a cada %s min)",
+                 spec.name, spec.check, spec.interval_minutes)
+        return ""
+
+    def remover(self, nome: str) -> bool:
+        if nome not in self.dinamicos:
+            return False
+        try:
+            self.scheduler.remove_job(f"monitor-{nome}")
+        except Exception:
+            pass
+        self.dinamicos.pop(nome, None)
+        self._state.pop(nome, None)
+        self._checks.pop(nome, None)
+        self._salvar_dinamicos()
+        log.info("monitor dinâmico '%s' removido", nome)
+        return True
+
+    def listar(self) -> str:
+        fixos = [f"  {m.name} ({m.check}, a cada {m.interval_minutes} min) — do config"
+                 for m in self.config.monitors]
+        criados = []
+        for nome, spec in self.dinamicos.items():
+            extra = []
+            if spec.params.get("uma_vez"):
+                extra.append("dispara uma vez")
+            if spec.params.get("expira_em"):
+                extra.append(f"expira {spec.params['expira_em'][:16]}")
+            criados.append(f"  {nome} ({spec.check}, a cada {spec.interval_minutes} min)"
+                           + (f" — {', '.join(extra)}" if extra else ""))
+        partes = []
+        if fixos:
+            partes.append("Fixos:\n" + "\n".join(fixos))
+        if criados:
+            partes.append("Criados a pedido:\n" + "\n".join(criados))
+        return "\n\n".join(partes) or "Nenhum monitor ativo."
 
     def _check_for(self, spec: MonitorSpec):
         if spec.check == "drive_folder":
@@ -260,8 +344,10 @@ class FridayMonitor:
                 minutes=spec.interval_minutes,
                 args=[spec],
                 id=f"monitor-{spec.name}",
+                replace_existing=True,   # start() duas vezes não pode explodir
             )
             log.info("monitor '%s' ativo (%s, a cada %s min)", spec.name, spec.check, spec.interval_minutes)
+        self._carregar_dinamicos()
 
     async def _run(self, spec: MonitorSpec):
         try:
@@ -272,6 +358,19 @@ class FridayMonitor:
 
         critical = bool(spec.params.get("critical"))
         urgencia = spec.params.get("urgency") or ("critical" if critical else "normal")
+
+        # Vigia com prazo: "me avisa quando chegar o email do banco" não pode
+        # ficar vigiando para sempre depois de cumprir o combinado.
+        prazo = spec.params.get("expira_em")
+        if prazo:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            agora = datetime.now(ZoneInfo(self.config.timezone)).isoformat(timespec="minutes")
+            if agora >= prazo:
+                if self.remover(spec.name):
+                    await self.send(f"⏳ Monitor '{spec.name}' expirou e foi removido.")
+                return
         previous = self._state.get(spec.name)
         self._state[spec.name] = problem
         self._update_face()
@@ -294,6 +393,9 @@ class FridayMonitor:
                 )
                 answer = await self.brain.ask(f"[{instrucao}] {detail}")
                 await self.send(f"{icone} {answer}", urgency=urgencia)
+                if spec.params.get("uma_vez") and self.remover(spec.name):
+                    await self.send(f"✔️ Era isso que eu estava vigiando — "
+                                    f"encerrei o monitor '{spec.name}'.")
             elif not problem and previous is True and spec.params.get("notify_recovery", True):
                 await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).")
         except Exception:

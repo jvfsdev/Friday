@@ -82,6 +82,18 @@ class Notifier:
         if critical and urgency == "normal":   # compatibilidade
             urgency = "critical"
 
+        # Não perturbe: o chefe está em reunião/encontro. Nada de telefone nem
+        # de alerta que fura o silêncio do celular — a mensagem no Telegram
+        # continua, para ele ver quando olhar.
+        from . import flags
+
+        if urgency != "normal" and flags.ativo("nao_perturbe", self.config.timezone):
+            estado = flags.detalhe("nao_perturbe", self.config.timezone) or {}
+            log.info("não perturbe ativo (%s) — rebaixando '%s' para mensagem",
+                     estado.get("motivo", "sem motivo"), urgency)
+            urgency = "normal"
+            text = f"🔕 {text}"
+
         if urgency == "decision" and self.call_user:
             try:
                 await self.call_user(text)
