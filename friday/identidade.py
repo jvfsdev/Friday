@@ -38,18 +38,19 @@ def _descobrir() -> set[str]:
         except Exception:
             log.warning("não consegui descobrir o email da conta Google '%s'", conta)
 
-    import httpx
+    # Microsoft: o endereço já está no cache do token (campo username do MSAL).
+    # Perguntar ao Graph /me exigiria o escopo User.Read, que não pedimos — e
+    # não vale forçar o chefe a reautorizar só para saber o email dele.
+    import json
 
     from .tools import outlook
 
     for conta in outlook.accounts():
         try:
-            token = outlook._access_token_sync(os.getenv("MS_CLIENT_ID", ""), conta)
-            dados = httpx.get(f"{outlook.GRAPH}/me",
-                              headers={"Authorization": f"Bearer {token}"}, timeout=20).json()
-            for campo in ("mail", "userPrincipalName"):
-                if dados.get(campo):
-                    enderecos.add(str(dados[campo]).lower())
+            cache = json.loads(outlook.cache_file(conta).read_text(encoding="utf-8"))
+            for dados in (cache.get("Account") or {}).values():
+                if dados.get("username"):
+                    enderecos.add(str(dados["username"]).lower())
         except Exception:
             log.warning("não consegui descobrir o email da conta Microsoft '%s'", conta)
 
