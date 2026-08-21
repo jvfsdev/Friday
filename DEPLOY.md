@@ -227,9 +227,20 @@ automático (no quiet_hours vira só um relógio fraco).
 
 ## 10. Extras
 
-- **Backup**: descomente `backup_dir` e a rotina `backup-diario` no
-  `config.yaml`. Para copiar à nuvem, configure `rclone` e adicione ao
-  script. Teste manual: `bash scripts/backup.sh /caminho/destino`.
+- **Backup semanal com cópia no Drive** (recomendado):
+  ```bash
+  sudo crontab -e
+  # domingo às 3h:
+  0 3 * * 0 /home/jarvis/Friday/scripts/backup_semanal.sh >> /var/log/jarvis-backup.log 2>&1
+  ```
+  Roda como root (único jeito de ler o config do Home Assistant) e envia ao
+  Drive como o usuário do JARVIS, mantendo 7 cópias locais e 3 no Drive.
+  Exige autorizar o escopo `drive.file` numa conta (`scripts/google_auth.py`).
+  Teste manual: `sudo ./scripts/backup_semanal.sh`.
+  O pacote leva memória, tokens, `.env`, config, o banco de finanças **com a
+  chave** e o config do Home Assistant. Fica de fora o que se reconstrói:
+  `.venv`, modelos de voz e o histórico do HA (389 MB de gráficos).
+  Vale um monitor `command` avisando se passar 8 dias sem backup.
 - **Navegador de verdade** (sites com JavaScript):
   `.venv/bin/pip install -e ".[browser]" && .venv/bin/playwright install chromium`
   (~300 MB; avalie se o notebook aguenta — as ferramentas `browse`/
