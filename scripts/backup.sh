@@ -28,11 +28,15 @@ tar -cf "$TAR" -C "$ROOT" --exclude='state/voices' --exclude='*.pyc' -T "$LISTA"
 
 # Extras que vivem fora do repositório. O banco de finanças vai COM a chave
 # que o decifra — sem ela o arquivo cifrado não serve para nada.
+# A casa é a pasta que contém o repositório — NÃO $HOME, que vira /root
+# quando o backup roda com sudo (e aí os extras simplesmente sumiam).
+CASA="$(cd "$ROOT/.." && pwd)"
+
 EXTRAS=""
-[ -d "$HOME/.openfinance-analyst" ] && EXTRAS="$EXTRAS .openfinance-analyst"
-if [ -d "$HOME/homeassistant" ]; then
-  [ -d "$HOME/homeassistant/.storage" ] && EXTRAS="$EXTRAS homeassistant/.storage"
-  for y in "$HOME"/homeassistant/*.yaml; do
+[ -d "$CASA/.openfinance-analyst" ] && EXTRAS="$EXTRAS .openfinance-analyst"
+if [ -d "$CASA/homeassistant" ]; then
+  [ -d "$CASA/homeassistant/.storage" ] && EXTRAS="$EXTRAS homeassistant/.storage"
+  for y in "$CASA"/homeassistant/*.yaml; do
     [ -e "$y" ] && EXTRAS="$EXTRAS homeassistant/$(basename "$y")"
   done
 fi
@@ -41,7 +45,7 @@ fi
 # avisamos e seguimos: o núcleo (tokens, memória, config) é o essencial.
 FALTOU=""
 for extra in $EXTRAS; do
-  if tar -rf "$TAR" -C "$HOME" "$extra" 2>/dev/null; then
+  if tar -rf "$TAR" -C "$CASA" "$extra" 2>/dev/null; then
     continue
   fi
   FALTOU="$FALTOU $extra"
