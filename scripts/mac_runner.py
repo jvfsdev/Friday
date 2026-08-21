@@ -24,10 +24,33 @@ BASE = Path.home() / ".jarvis" / "jobs"
 PENDENTES, PRONTOS = BASE / "pending", BASE / "done"
 TIMEOUT_AGENTE = 1800
 
+# Comandos que o agente pode rodar sozinho. Lista fechada de propósito:
+# rodar a suíte antes de entregar melhora muito o que chega para revisão, mas
+# execução arbitrária no Mac do chefe é outra conversa — e o gatilho pode vir
+# de um email de terceiro (pipeline de reclamação).
+TESTES_PERMITIDOS = [
+    "Bash(pytest*)", "Bash(python -m pytest*)", "Bash(python3 -m pytest*)",
+    "Bash(python -m unittest*)", "Bash(python3 -m unittest*)",
+    "Bash(npm test*)", "Bash(npm run test*)", "Bash(yarn test*)", "Bash(pnpm test*)",
+    "Bash(npx vitest*)", "Bash(npx jest*)", "Bash(go test*)", "Bash(cargo test*)",
+    "Bash(make test*)", "Bash(mvn test*)", "Bash(./gradlew test*)",
+]
+
 AGENTES = {
-    "claude": ["claude", "-p", "{tarefa}", "--permission-mode", "acceptEdits"],
+    "claude": [
+        "claude", "-p", "{tarefa}", "--permission-mode", "acceptEdits",
+        "--allowedTools", *TESTES_PERMITIDOS,
+    ],
+    # O agy só oferece tudo-ou-nada em permissões, então fica só com edição.
     "antigravity": ["agy", "-p", "{tarefa}", "--mode", "accept-edits"],
 }
+
+# Vai junto da tarefa: sem isso o agente entrega sem validar o que escreveu.
+PEDIDO_DE_TESTE = (
+    "\n\n[Se este projeto tiver testes automatizados, rode-os antes de terminar "
+    "e me diga o resultado. Se algum falhar por causa do que você mudou, corrija. "
+    "Se não houver testes ou o runner não estiver instalado, apenas diga isso.]"
+)
 
 # Continuar a conversa anterior daquela pasta — inclusive uma que o chefe tenha
 # aberto no Mac. É de propósito: ele pediu para o JARVIS entrar na sessão dele,
@@ -77,7 +100,7 @@ def executar(tarefa_spec: dict) -> dict:
     _, base = _git(caminho, "rev-parse", "HEAD", env=env)
 
     def rodar(nome: str, modelo: list, continuar: bool):
-        comando = [p.replace("{tarefa}", tarefa) for p in modelo]
+        comando = [p.replace("{tarefa}", tarefa + PEDIDO_DE_TESTE) for p in modelo]
         if continuar and CONTINUAR.get(nome):
             comando.insert(1, CONTINUAR[nome])
         return subprocess.run(
