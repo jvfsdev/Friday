@@ -64,7 +64,11 @@ def _service(name: str, version: str, account: str):
     from googleapiclient.discovery import build
 
     path = token_file(account)
-    creds = Credentials.from_authorized_user_file(str(path), SCOPES)
+    # Sem passar SCOPES: o token carrega os escopos que ELE recebeu. Forçar a
+    # lista atual faz o Google recusar a renovação (invalid_scope) de toda
+    # conta autorizada antes de um escopo novo entrar no código — ou seja,
+    # acrescentar capacidade quebrava as contas antigas em silêncio.
+    creds = Credentials.from_authorized_user_file(str(path))
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
         path.write_text(creds.to_json(), encoding="utf-8")
