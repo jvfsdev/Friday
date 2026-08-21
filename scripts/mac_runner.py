@@ -29,6 +29,15 @@ AGENTES = {
     "antigravity": ["agy", "-p", "{tarefa}", "--mode", "accept-edits"],
 }
 
+# Continuar a conversa anterior daquela pasta — inclusive uma que o chefe tenha
+# aberto no Mac. É de propósito: ele pediu para o JARVIS entrar na sessão dele,
+# assim o agente já chega sabendo o que estava sendo feito ali.
+CONTINUAR = {"claude": "--continue", "antigravity": "--continue"}
+
+# Sinais de "não existe conversa anterior aqui" — primeira tarefa no projeto.
+SEM_CONVERSA = ("no conversation", "nenhuma conversa", "no previous", "not found",
+                "no sessions", "nao encontrada")
+
 PATH_EXTRA = [str(Path.home() / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin"]
 
 
@@ -67,22 +76,37 @@ def executar(tarefa_spec: dict) -> dict:
         return {"ok": False, "resultado": f"Falha ao criar o branch {branch}: {saida[:300]}"}
     _, base = _git(caminho, "rev-parse", "HEAD", env=env)
 
-    tentativas, usado, resposta = [], None, ""
+    def rodar(nome: str, modelo: list, continuar: bool):
+        comando = [p.replace("{tarefa}", tarefa) for p in modelo]
+        if continuar and CONTINUAR.get(nome):
+            comando.insert(1, CONTINUAR[nome])
+        return subprocess.run(
+            comando, cwd=caminho, capture_output=True, text=True,
+            timeout=TIMEOUT_AGENTE, env=env, stdin=subprocess.DEVNULL,
+        )
+
+    continuar = not tarefa_spec.get("novaSessao")
+    tentativas, usado, resposta, sessao = [], None, "", "nova"
     for nome in preferidos:
         modelo = AGENTES.get(nome)
         if not modelo or not shutil.which(modelo[0], path=env["PATH"]):
             tentativas.append(f"{nome}: não instalado")
             continue
-        comando = [p.replace("{tarefa}", tarefa) for p in modelo]
         try:
-            r = subprocess.run(
-                comando, cwd=caminho, capture_output=True, text=True,
-                timeout=TIMEOUT_AGENTE, env=env, stdin=subprocess.DEVNULL,
-            )
+            r = rodar(nome, modelo, continuar)
+            saida_agente = (r.stdout + r.stderr).strip()
+            # Primeira tarefa no projeto: não há conversa para continuar.
+            if continuar and r.returncode != 0 and any(
+                s in saida_agente.lower() for s in SEM_CONVERSA
+            ):
+                r = rodar(nome, modelo, False)
+                saida_agente = (r.stdout + r.stderr).strip()
+                sessao = "nova (não havia conversa anterior)"
+            elif continuar:
+                sessao = "continuando a conversa anterior do projeto"
         except subprocess.TimeoutExpired:
             tentativas.append(f"{nome}: estourou {TIMEOUT_AGENTE}s")
             continue
-        saida_agente = (r.stdout + r.stderr).strip()
         if r.returncode == 0:
             usado, resposta = nome, saida_agente
             break
@@ -111,6 +135,7 @@ def executar(tarefa_spec: dict) -> dict:
     return {
         "ok": True,
         "agente": usado,
+        "sessao": sessao,
         "branch": branch,
         "diffstat": diffstat,
         "resultado": resposta[:2000],

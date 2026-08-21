@@ -58,7 +58,8 @@ def _ordem(config, agente: str) -> list[str]:
     return [a for a in preferencia if a in disponiveis]
 
 
-async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str) -> str:
+async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str,
+                    nova_sessao: bool = False) -> str:
     """Deposita a tarefa para o executor que roda na sessão gráfica do Mac.
 
     Não chamamos o agente direto por SSH porque o macOS não abre o Keychain
@@ -69,7 +70,12 @@ async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str) 
     machine = spec["machine"]
     job_id = uuid.uuid4().hex[:10]
     payload = json.dumps(
-        {"path": spec["path"], "tarefa": tarefa, "agentes": _ordem(config, agente)},
+        {
+            "path": spec["path"],
+            "tarefa": tarefa,
+            "agentes": _ordem(config, agente),
+            "novaSessao": bool(nova_sessao),
+        },
         ensure_ascii=False,
     )
 
@@ -110,7 +116,8 @@ async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str) 
         return f"Não deu certo: {resultado.get('resultado', 'sem detalhes')}"
 
     return (
-        f"Pronto, usei o {resultado.get('agente')} no projeto {projeto}.\n"
+        f"Pronto, usei o {resultado.get('agente')} no projeto {projeto} "
+        f"({resultado.get('sessao', 'sessão nova')}).\n"
         f"Branch: {resultado.get('branch')} (commit local, sem push)\n\n"
         f"{truncate(resultado.get('diffstat', ''), 1500)}\n\n"
         f"Abri o projeto no Mac para você revisar. Resumo do agente:\n"
@@ -118,19 +125,26 @@ async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str) 
     )
 
 
-async def _codar(ctx: ToolContext, projeto: str, tarefa: str, agente: str = "auto") -> str:
+async def _codar(ctx: ToolContext, projeto: str, tarefa: str, agente: str = "auto",
+                 nova_sessao: bool = False) -> str:
     projetos = ctx.config.code_projects or {}
     spec = projetos.get(projeto)
     if not spec:
         conhecidos = ", ".join(projetos) or "nenhum"
         return f"Projeto '{projeto}' não está na lista permitida. Projetos: {conhecidos}."
+
+    # Agente escrito errado não pode virar "tanto faz": o chefe pediu um.
+    ordem = _ordem(ctx.config, agente)
+    if not ordem:
+        return (f"Agente '{agente}' não existe. Disponíveis: "
+                f"{', '.join(_agentes(ctx.config))} — ou 'auto'.")
     if not ctx.jobs:
         return "Registro de trabalhos indisponível."
 
     config = ctx.config
     job = ctx.jobs.submit(
         "codar", f"{projeto} — {tarefa[:80]}",
-        lambda: _executar(config, projeto, spec, tarefa, agente),
+        lambda: _executar(config, projeto, spec, tarefa, agente, nova_sessao),
     )
     return (
         f"Trabalho [{job.id}] iniciado no projeto {projeto}. Pode levar alguns minutos; "
@@ -154,8 +168,10 @@ CODAR_TOOL = Tool(
         "name": "codar",
         "description": (
             "Delega uma tarefa de programação ao agente de código no Mac do chefe. "
-            "Trabalha sempre num branch novo e abre o editor para revisão; nunca faz "
-            "push. Demora minutos: avisa o chefe e NÃO fique esperando."
+            "Continua a conversa anterior do projeto por padrão, então dá para pedir "
+            "ajustes em cima do que foi feito antes. Trabalha sempre num branch novo e "
+            "abre o editor para revisão; nunca faz push. Demora minutos: avisa o chefe "
+            "e NÃO fique esperando."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -163,6 +179,14 @@ CODAR_TOOL = Tool(
                 "projeto": {"type": "STRING", "description": "Nome do projeto na lista permitida."},
                 "tarefa": {"type": "STRING", "description": "A tarefa, detalhada como você explicaria a um colega."},
                 "agente": {"type": "STRING", "description": "claude, antigravity ou auto (padrão)."},
+                "nova_sessao": {
+                    "type": "BOOLEAN",
+                    "description": (
+                        "Por padrão continua a conversa anterior naquele projeto (inclusive "
+                        "a que o chefe tiver aberto no Mac). Use true quando a tarefa não "
+                        "tiver relação com o que veio antes."
+                    ),
+                },
             },
             "required": ["projeto", "tarefa"],
         },
