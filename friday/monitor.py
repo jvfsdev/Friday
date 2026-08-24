@@ -14,6 +14,10 @@ from .config import Config, MonitorSpec
 
 log = logging.getLogger("friday.monitor")
 
+# Quantas checagens seguidas precisam falhar antes de incomodar o chefe.
+# Rede oscila; três seguidas já não é oscilação.
+FALHAS_ATE_AVISAR = 3
+
 
 async def _run_quiet(command: str, timeout: int = 30) -> tuple[int, str]:
     proc = await asyncio.create_subprocess_shell(
@@ -228,6 +232,8 @@ class FridayMonitor:
         self.pipelines = pipelines or {}
         self._state: dict[str, bool] = {}
         self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
+        self._falhas: dict[str, int] = {}     # checagens seguidas que não completaram
+        self._cegueira_avisada: set[str] = set()  # monitores cuja cegueira já foi reportada
         self.dinamicos: dict[str, MonitorSpec] = {}
 
     # ---- monitores que o próprio JARVIS cria ----
@@ -290,6 +296,8 @@ class FridayMonitor:
         self.dinamicos.pop(nome, None)
         self._state.pop(nome, None)
         self._checks.pop(nome, None)
+        self._falhas.pop(nome, None)
+        self._cegueira_avisada.discard(nome)
         self._salvar_dinamicos()
         log.info("monitor dinâmico '%s' removido", nome)
         return True
@@ -349,12 +357,39 @@ class FridayMonitor:
             log.info("monitor '%s' ativo (%s, a cada %s min)", spec.name, spec.check, spec.interval_minutes)
         self._carregar_dinamicos()
 
+    async def _avisar(self, texto: str) -> bool:
+        """Avisa o chefe e diz se conseguiu — durante uma queda de rede nem o
+        Telegram responde, e um aviso perdido não pode contar como dado."""
+        try:
+            await self.send(texto, urgency="normal")
+            return True
+        except Exception as exc:
+            log.warning("não consegui avisar o chefe: %s", exc)
+            return False
+
     async def _run(self, spec: MonitorSpec):
         try:
             problem, detail = await self._check_for(spec)(spec.params)
+            if self._falhas.pop(spec.name, 0) and spec.name in self._cegueira_avisada:
+                self._cegueira_avisada.discard(spec.name)
+                await self._avisar(f"👁️ Voltei a enxergar o monitor '{spec.name}'.")
         except Exception as exc:
-            log.exception("monitor '%s' falhou", spec.name)
-            problem, detail = True, f"a própria checagem falhou: {type(exc).__name__}: {exc}"
+            # NÃO conseguir verificar é diferente de o que se vigia ter mudado.
+            # Um piscar de DNS chegava ao chefe como se fosse a notícia — e de
+            # madrugada. Só avisamos quando a cegueira persiste, e sem tocar no
+            # estado do que se vigia (senão a volta vira "normalizado").
+            self._falhas[spec.name] = vezes = self._falhas.get(spec.name, 0) + 1
+            log.warning("monitor '%s' não conseguiu verificar (%dx): %s",
+                        spec.name, vezes, exc)
+            if vezes >= FALHAS_ATE_AVISAR and spec.name not in self._cegueira_avisada:
+                # Numa queda de rede o próprio aviso não sai; só marcamos como
+                # avisado se ele realmente chegou, para tentar de novo depois.
+                if await self._avisar(
+                    f"👁️ Não consigo verificar '{spec.name}' há {vezes} tentativas "
+                    f"({type(exc).__name__}). Deve ser rede aqui do servidor; sigo tentando."
+                ):
+                    self._cegueira_avisada.add(spec.name)
+            return
 
         critical = bool(spec.params.get("critical"))
         urgencia = spec.params.get("urgency") or ("critical" if critical else "normal")
@@ -391,7 +426,13 @@ class FridayMonitor:
                     f"Alerta do monitor '{spec.name}' — detectado agora, avise o chefe "
                     "de forma útil e sugira o que fazer",
                 )
-                answer = await self.brain.ask(f"[{instrucao}] {detail}")
+                try:
+                    answer = await self.brain.ask(f"[{instrucao}] {detail}", propagar_erro=True)
+                except Exception as exc:
+                    # Sem o modelo, o fato sozinho ainda vale — o que não vale
+                    # é mandar o erro dele como se fosse a notícia.
+                    log.warning("sem o modelo para enriquecer o alerta: %s", exc)
+                    answer = f"{detail}\n(não consegui elaborar: {type(exc).__name__})"
                 await self.send(f"{icone} {answer}", urgency=urgencia)
                 if spec.params.get("uma_vez") and self.remover(spec.name):
                     await self.send(f"✔️ Era isso que eu estava vigiando — "

@@ -54,8 +54,15 @@ class Brain:
             f"# Memória\n{memory.load_memory()}"
         )
 
-    async def ask(self, user_text: str, media: list[tuple[bytes, str]] | None = None) -> str:
-        """Pergunta à Friday. `media`: pares (bytes, mime_type) — áudio, imagem etc."""
+    async def ask(self, user_text: str, media: list[tuple[bytes, str]] | None = None,
+                  propagar_erro: bool = False) -> str:
+        """Pergunta ao JARVIS. `media`: pares (bytes, mime_type) — áudio, imagem etc.
+
+        `propagar_erro=True` levanta a exceção em vez de devolver o texto do
+        erro. Quem chama automaticamente (monitores) precisa saber que falhou,
+        senão manda "Algo deu errado do meu lado" ao chefe como se fosse a
+        notícia — foi o que aconteceu numa queda de DNS de madrugada.
+        """
         parts = [types.Part(text=user_text)]
         for data, mime_type in media or []:
             parts.append(types.Part.from_bytes(data=bytes(data), mime_type=mime_type))
@@ -66,6 +73,8 @@ class Brain:
             except errors.APIError as exc:
                 log.error("Erro da API Gemini: %s", exc)
                 self.history.pop()  # não deixa a conversa num estado quebrado
+                if propagar_erro:
+                    raise
                 if exc.code == 429:
                     return (
                         "Estourei os limites gratuitos do Gemini em todas as chaves e "
@@ -75,6 +84,8 @@ class Brain:
             except Exception as exc:
                 log.exception("erro inesperado no cérebro")
                 self.history.pop()
+                if propagar_erro:
+                    raise
                 return f"Algo deu errado do meu lado: {type(exc).__name__}: {exc}"
             self._trim_history()
             return answer
