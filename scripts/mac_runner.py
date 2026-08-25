@@ -8,13 +8,17 @@ executor tem acesso ao Keychain e também consegue abrir o editor na tela.
 
 O servidor deposita um JSON em ~/.jarvis/jobs/pending/ e lê o resultado em
 ~/.jarvis/jobs/done/. Instalação: veja DEPLOY.md (seção do Mac).
+
+O agente trabalha na branch que já estiver aberta e deixa as alterações
+SOLTAS, sem commit: é assim que o chefe revisa — o painel de mudanças do
+VS Code mostra arquivo por arquivo, e ele commita, ajusta ou descarta.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import time
@@ -22,6 +26,7 @@ from pathlib import Path
 
 BASE = Path.home() / ".jarvis" / "jobs"
 PENDENTES, PRONTOS = BASE / "pending", BASE / "done"
+ESTADOS = Path.home() / ".jarvis" / "estado"
 TIMEOUT_AGENTE = 1800
 
 # Comandos que o agente pode rodar sozinho. Lista fechada de propósito:
@@ -75,9 +80,76 @@ def _git(path: Path, *args, env=None):
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
-def _slug(texto: str) -> str:
-    limpo = re.sub(r"[^a-z0-9]+", "-", texto.lower())[:32].strip("-")
-    return f"{limpo or 'tarefa'}-{time.strftime('%m%d-%H%M')}"
+def _arquivo_estado(caminho: Path) -> Path:
+    return ESTADOS / (hashlib.sha1(str(caminho).encode()).hexdigest()[:12] + ".json")
+
+
+def _sujos(caminho: Path, env=None) -> list:
+    """Arquivos que diferem do último commit: mexidos, novos ou apagados.
+
+    De propósito por `--name-only` em vez de `status --porcelain`: o porcelain
+    codifica o estado nas duas primeiras colunas, e um caminho por linha limpa
+    não tem prefixo para errar ao fatiar.
+    """
+    code, mexidos = _git(caminho, "diff", "--name-only", "HEAD", env=env)
+    if code != 0:                 # repositório ainda sem commit nenhum
+        mexidos = ""
+    _, novos = _git(caminho, "ls-files", "--others", "--exclude-standard", env=env)
+    return sorted({l.strip() for l in (mexidos + "\n" + novos).splitlines() if l.strip()})
+
+
+def _impressoes(raiz: Path, sujos: list) -> dict:
+    """Assinatura do conteúdo de cada arquivo sujo — a prova de autoria."""
+    marcas = {}
+    for nome in sujos:
+        try:
+            marcas[nome] = hashlib.sha256((raiz / nome).read_bytes()).hexdigest()
+        except OSError:
+            marcas[nome] = "(apagado)"
+    return marcas
+
+
+def _deixei_eu(caminho: Path, sujos: list) -> bool:
+    """A sujeira na árvore é do trabalho anterior do JARVIS, ou do chefe?
+
+    Sem commit, a árvore fica suja depois de cada tarefa — e recusar por isso
+    mataria o "agora ajusta aquilo" logo em seguida. Então guardamos o
+    conteúdo exato do que deixamos: se cada arquivo sujo ainda está byte a
+    byte como saiu da nossa mão, é nosso e dá para continuar por cima. Basta
+    o chefe ter encostado num deles para pararmos.
+
+    É conteúdo, e não commit: assim ele pode aprovar metade do trabalho e
+    pedir ajuste no resto sem que a gente se recuse a mexer.
+    """
+    try:
+        estado = json.loads(_arquivo_estado(caminho).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    deixado = estado.get("arquivos")
+    if not isinstance(deixado, dict):
+        return False
+    return all(deixado.get(nome) == marca
+               for nome, marca in _impressoes(caminho, sujos).items())
+
+
+def _anotar_estado(caminho: Path, sujos: list):
+    ESTADOS.mkdir(parents=True, exist_ok=True)
+    _arquivo_estado(caminho).write_text(
+        json.dumps({"arquivos": _impressoes(caminho, sujos)}), encoding="utf-8"
+    )
+
+
+def _retrato(caminho: Path, env) -> tuple:
+    """Como a árvore está agora: (arquivos sujos, diff).
+
+    A lista diz QUAIS arquivos mudaram; o diff diz O QUE mudou — sem ele, um
+    agente que só reescreve um arquivo já sujo passaria por "não fez nada".
+    O `add -N` faz o arquivo novo aparecer no diff e no painel de mudanças do
+    VS Code, em vez de ficar escondido como "não rastreado".
+    """
+    _git(caminho, "add", "-N", ".", env=env)
+    _, diff = _git(caminho, "--no-pager", "diff", env=env)
+    return _sujos(caminho, env), diff
 
 
 def executar(tarefa_spec: dict) -> dict:
@@ -89,15 +161,17 @@ def executar(tarefa_spec: dict) -> dict:
     if not (caminho / ".git").exists():
         return {"ok": False, "resultado": f"{caminho} não é um repositório git."}
 
-    code, sujo = _git(caminho, "status", "--porcelain", env=env)
-    if sujo.strip():
-        return {"ok": False, "resultado": f"Repositório com alterações não commitadas:\n{sujo[:800]}"}
+    _, branch = _git(caminho, "rev-parse", "--abbrev-ref", "HEAD", env=env)
+    branch = branch.strip()
 
-    branch = f"jarvis/{_slug(tarefa)}"
-    code, saida = _git(caminho, "checkout", "-b", branch, env=env)
-    if code != 0:
-        return {"ok": False, "resultado": f"Falha ao criar o branch {branch}: {saida[:300]}"}
-    _, base = _git(caminho, "rev-parse", "HEAD", env=env)
+    sujos = _sujos(caminho, env)
+    if sujos and not _deixei_eu(caminho, sujos):
+        return {"ok": False, "resultado": (
+            "A árvore tem alterações que não são minhas — não vou mexer por cima do "
+            "trabalho do chefe. Commita ou guarda antes:\n"
+            + "\n".join(sujos)[:800])}
+
+    antes = _retrato(caminho, env)
 
     def rodar(nome: str, modelo: list, continuar: bool):
         comando = [p.replace("{tarefa}", tarefa + PEDIDO_DE_TESTE) for p in modelo]
@@ -135,19 +209,22 @@ def executar(tarefa_spec: dict) -> dict:
             break
         tentativas.append(f"{nome}: código {r.returncode} — {saida_agente[:200]}")
 
+    depois = _retrato(caminho, env)
+    _anotar_estado(caminho, depois[0])
+
     if not usado:
-        _git(caminho, "checkout", "-", env=env)
-        _git(caminho, "branch", "-D", branch, env=env)
-        return {"ok": False, "resultado": "Nenhum agente executou. " + "; ".join(tentativas)}
+        # Não desfazemos nada: um agente que morreu no meio pode ter deixado
+        # edição pela metade, e jogar fora trabalho por conta própria é pior
+        # do que avisar.
+        recado = "Nenhum agente executou. " + "; ".join(tentativas)
+        if depois != antes:
+            recado += "\n(Sobrou alteração pela metade na árvore — dá uma olhada antes.)"
+        return {"ok": False, "resultado": recado}
 
-    _git(caminho, "add", "-A", env=env)
-    _git(caminho, "commit", "-m", f"JARVIS: {tarefa[:120]}", "--no-verify", env=env)
-    _, diffstat = _git(caminho, "--no-pager", "diff", "--stat", f"{base.strip()}..HEAD", env=env)
-
-    if not diffstat.strip():
-        _git(caminho, "checkout", "-", env=env)
-        _git(caminho, "branch", "-D", branch, env=env)
+    if depois == antes:
         return {"ok": False, "resultado": f"O {usado} rodou mas não mudou arquivo nenhum.\n{resposta[:1200]}"}
+
+    _, diffstat = _git(caminho, "--no-pager", "diff", "--stat", env=env)
 
     # abre para revisão na tela (aqui dentro da sessão gráfica isso funciona)
     for abrir in (["code", str(caminho)], ["open", str(caminho)]):
@@ -161,6 +238,7 @@ def executar(tarefa_spec: dict) -> dict:
         "sessao": sessao,
         "branch": branch,
         "diffstat": diffstat,
+        "desfazer": "git reset --hard && git clean -fd",
         "resultado": resposta[:2000],
     }
 

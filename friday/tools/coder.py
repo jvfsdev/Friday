@@ -6,9 +6,11 @@ agente que estiver lá — Claude Code ou Antigravity, mesma interface.
 
 Trilhos de segurança, sempre:
   * só projetos declarados em `code_projects:` no config;
-  * árvore limpa antes de começar (nada de misturar com trabalho em curso);
-  * sempre num branch novo `jarvis/...`, nunca no principal;
-  * commit local, NUNCA push/merge/deploy — a última palavra é do chefe;
+  * nada de mexer por cima de trabalho do chefe — se a árvore tem alteração
+    que não é nossa, para;
+  * trabalha na branch que já está aberta lá e deixa tudo SOLTO, sem commit:
+    é assim que ele revisa, no painel de mudanças do VS Code;
+  * NUNCA commita, faz push, merge ou deploy — a última palavra é do chefe;
   * o editor abre no Mac com o resultado para revisão.
 """
 
@@ -118,10 +120,11 @@ async def _executar(config, projeto: str, spec: dict, tarefa: str, agente: str,
     return (
         f"Pronto, usei o {resultado.get('agente')} no projeto {projeto} "
         f"({resultado.get('sessao', 'sessão nova')}).\n"
-        f"Branch: {resultado.get('branch')} (commit local, sem push)\n\n"
+        f"Branch {resultado.get('branch')}, alterações soltas — não commitei nada.\n\n"
         f"{truncate(resultado.get('diffstat', ''), 1500)}\n\n"
-        f"Abri o projeto no Mac para você revisar. Resumo do agente:\n"
-        f"{truncate(resultado.get('resultado', ''), 1200)}"
+        f"Abri o projeto no Mac: está tudo no painel de mudanças do editor. "
+        f"Para jogar fora: `{resultado.get('desfazer', 'git reset --hard && git clean -fd')}`\n\n"
+        f"Resumo do agente:\n{truncate(resultado.get('resultado', ''), 1200)}"
     )
 
 
@@ -169,9 +172,10 @@ CODAR_TOOL = Tool(
         "description": (
             "Delega uma tarefa de programação ao agente de código no Mac do chefe. "
             "Continua a conversa anterior do projeto por padrão, então dá para pedir "
-            "ajustes em cima do que foi feito antes. Trabalha sempre num branch novo e "
-            "abre o editor para revisão; nunca faz push. Demora minutos: avisa o chefe "
-            "e NÃO fique esperando."
+            "ajustes em cima do que foi feito antes. Trabalha na branch que já está "
+            "aberta no Mac e deixa as alterações sem commit, para o chefe revisar no "
+            "editor; nunca commita nem faz push. Demora minutos: avisa o chefe e NÃO "
+            "fique esperando."
         ),
         "parameters": {
             "type": "OBJECT",

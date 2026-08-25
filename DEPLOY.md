@@ -354,8 +354,9 @@ Duas entradas possíveis, ambas caindo no mesmo roteiro:
 
 O que acontece: ele estuda → manda o resumo no Telegram → se dá para corrigir
 num projeto da lista, **liga** pedindo autorização → autorizado, o agente
-trabalha no Mac, abre o editor com o branch e ainda deixa um rascunho de
-resposta ao cliente (que só sai com a sua confirmação).
+trabalha no Mac, abre o editor com as alterações prontas para você revisar
+(sem commit) e ainda deixa um rascunho de resposta ao cliente (que só sai com
+a sua confirmação).
 
 ## Resumo do que a Friday ganha em cada passo
 
