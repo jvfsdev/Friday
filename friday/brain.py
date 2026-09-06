@@ -80,6 +80,13 @@ class Brain:
                         "Estourei os limites gratuitos do Gemini em todas as chaves e "
                         "modelos por agora, chefe. Tenta de novo mais tarde."
                     )
+                if exc.code == 503:
+                    # Só chega aqui depois de a escada inteira estar sobrecarregada.
+                    return (
+                        "Todos os modelos da minha lista estão sobrecarregados no "
+                        "Google agora, chefe — desci a escada inteira e não passou. "
+                        "Costuma durar poucos minutos."
+                    )
                 return f"Deu erro na API do Gemini ({exc.code}): {exc.message}"
             except Exception as exc:
                 log.exception("erro inesperado no cérebro")
