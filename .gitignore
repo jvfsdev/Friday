@@ -6,3 +6,7 @@ memory/*.md
 !memory/.gitkeep
 state/
 config.yaml
+
+# Lixo do macOS e artefatos de build
+.DS_Store
+*.egg-info/
