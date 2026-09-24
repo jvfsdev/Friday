@@ -296,7 +296,7 @@ confira se a correção sobreviveu ao merge.
 A ponte MCP é genérica: outros servidores MCP entram do mesmo jeito, só
 adicionando blocos em `mcp_servers:`.
 
-## 12. Código delegado ao Mac (Claude Code / Antigravity)
+## 12. Código delegado ao Mac (Claude Code)
 
 O servidor não roda agentes de código (CPU de 2011 sem as instruções que os
 binários exigem). Ele delega ao Mac — que precisa de um executor rodando na
@@ -306,15 +306,14 @@ sessão gráfica, porque sessões SSH no macOS não abrem o Keychain do login
 No **Mac**:
 ```bash
 npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code
-curl -fsSL https://antigravity.google/cli/install.sh | bash   # opcional
-agy                       # faça o login com a conta Google AI Pro (uma vez)
+claude                    # faça o login (uma vez)
 mkdir -p ~/.jarvis && cp scripts/mac_runner.py ~/.jarvis/
 cp deploy/com.jarvis.runner.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/com.jarvis.runner.plist
 ```
 Ative **Ajustes → Geral → Compartilhamento → Sessão Remota** e autorize a
 chave do servidor (`ssh-copy-id`). Confira o executor com
-`launchctl list | grep jarvis` e o log em `/tmp/jarvis-runner.log`.
+`launchctl list | grep jarvis` e o log em `~/Library/Logs/jarvis-runner.log`.
 
 ⚠️ **Detalhe do macOS**: o script precisa morar em `~/.jarvis/` (e não dentro
 de `~/Documents`) porque o launchd é bloqueado pela proteção de privacidade ao
@@ -325,6 +324,13 @@ aparecer `Operation not permitted`, conceda **Acesso Total ao Disco** ao
 
 No `config.yaml` do servidor, declare a lista fechada `code_projects:`
 (exemplo no config.example.yaml). Teste: "JARVIS, no projeto X, adicione ...".
+
+Como ele trabalha: na branch que estiver aberta no Mac, sem commit — as
+alterações ficam soltas para você revisar no painel de mudanças do editor.
+Pedido de análise ("estuda o projeto", "o que esse módulo faz?") também vale:
+volta só a resposta. Durante o trabalho dá para perguntar "como está?" (última
+ação ao vivo) ou mandar parar. A mensagem final traz o `claude --resume <id>`
+para você abrir aquela conversa no terminal e seguir dali.
 
 ## 13. Ligações telefônicas (Twilio)
 

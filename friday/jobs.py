@@ -27,6 +27,8 @@ class Job:
     created_at: float = field(default_factory=time.time)
     finished_at: float | None = None
     result: str = ""
+    # O que for específico do tipo de trabalho (ex.: onde acompanhar no Mac).
+    meta: dict = field(default_factory=dict)
 
     def resumo(self) -> str:
         idade = int((self.finished_at or time.time()) - self.created_at)

@@ -6,12 +6,16 @@ SSH no macOS não conseguem abrir o Keychain do login — e é lá que o Claude
 Code guarda as credenciais. Rodando como LaunchAgent (sessão gráfica), este
 executor tem acesso ao Keychain e também consegue abrir o editor na tela.
 
-O servidor deposita um JSON em ~/.jarvis/jobs/pending/ e lê o resultado em
-~/.jarvis/jobs/done/. Instalação: veja DEPLOY.md (seção do Mac).
+Protocolo, tudo em ~/.jarvis/jobs/ (o servidor fala por SSH):
+  pending/<id>.json   o servidor deposita a tarefa
+  running/<id>.json   progresso ao vivo (última ação, nº de ações, sessão)
+  cancel/<id>         o servidor pede para parar
+  done/<id>.json      o resultado, que o servidor lê e apaga
 
 O agente trabalha na branch que já estiver aberta e deixa as alterações
 SOLTAS, sem commit: é assim que o chefe revisa — o painel de mudanças do
 VS Code mostra arquivo por arquivo, e ele commita, ajusta ou descarta.
+Instalação: veja DEPLOY.md (seção do Mac).
 """
 
 from __future__ import annotations
@@ -19,15 +23,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import shutil
+import signal
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
 
 BASE = Path.home() / ".jarvis" / "jobs"
 PENDENTES, PRONTOS = BASE / "pending", BASE / "done"
+RODANDO, CANCELAR = BASE / "running", BASE / "cancel"
 ESTADOS = Path.home() / ".jarvis" / "estado"
 TIMEOUT_AGENTE = 1800
+# Resultado que o servidor nunca buscou (ele caiu, a rede caiu) não pode se
+# acumular para sempre.
+RETENCAO_PRONTOS = 2 * 24 * 3600
 
 # Comandos que o agente pode rodar sozinho. Lista fechada de propósito:
 # rodar a suíte antes de entregar melhora muito o que chega para revisão, mas
@@ -40,31 +52,29 @@ TESTES_PERMITIDOS = [
     "Bash(npx vitest*)", "Bash(npx jest*)", "Bash(go test*)", "Bash(cargo test*)",
     "Bash(make test*)", "Bash(mvn test*)", "Bash(./gradlew test*)",
 ]
+# Só leitura: metade dos pedidos reais é "estuda o projeto" / "roda um git
+# status", e sem isso o agente respondia às cegas. Nada que mude branch,
+# índice ou histórico (git branch fica de fora: aceita -D).
+GIT_LEITURA = [
+    "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)",
+    "Bash(ls*)",
+]
 
-AGENTES = {
-    "claude": [
-        "claude", "-p", "{tarefa}", "--permission-mode", "acceptEdits",
-        "--allowedTools", *TESTES_PERMITIDOS,
-    ],
-    # O agy só oferece tudo-ou-nada em permissões, então fica só com edição.
-    "antigravity": ["agy", "-p", "{tarefa}", "--mode", "accept-edits"],
-}
-
-# Vai junto da tarefa: sem isso o agente entrega sem validar o que escreveu.
-PEDIDO_DE_TESTE = (
-    "\n\n[Se este projeto tiver testes automatizados, rode-os antes de terminar "
-    "e me diga o resultado. Se algum falhar por causa do que você mudou, corrija. "
-    "Se não houver testes ou o runner não estiver instalado, apenas diga isso.]"
-)
-
-# Continuar a conversa anterior daquela pasta — inclusive uma que o chefe tenha
-# aberto no Mac. É de propósito: ele pediu para o JARVIS entrar na sessão dele,
-# assim o agente já chega sabendo o que estava sendo feito ali.
-CONTINUAR = {"claude": "--continue", "antigravity": "--continue"}
-
-# Sinais de "não existe conversa anterior aqui" — primeira tarefa no projeto.
-SEM_CONVERSA = ("no conversation", "nenhuma conversa", "no previous", "not found",
-                "no sessions", "nao encontrada")
+# Regras da casa, no prompt de sistema e não colado na tarefa: com --continue
+# o agente entra na conversa que o chefe tiver aberto no Mac, e o texto da
+# tarefa fica no histórico dele — melhor que fique só o pedido.
+INSTRUCOES = """\
+Esta tarefa chega pelo JARVIS, o assistente pessoal do dono deste Mac, que a
+repassou do Telegram. Ele não está olhando o terminal agora.
+- Pode ser uma pergunta ou análise: aí apenas responda, sem alterar arquivos.
+- Se alterar código e o projeto tiver testes automatizados, rode-os antes de
+  terminar; se algum falhar pelo que você mudou, corrija. Sem testes (ou sem
+  o runner instalado), apenas diga isso.
+- Nunca faça commit, push, stash nem troque de branch: as alterações ficam
+  soltas na árvore para o dono revisar no editor.
+- Sua resposta final vai para o celular dele: em português, direta, no
+  máximo umas 15 linhas. Diga o que mudou e por quê, e o resultado dos testes.
+"""
 
 PATH_EXTRA = [str(Path.home() / ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin"]
 
@@ -152,14 +162,138 @@ def _retrato(caminho: Path, env) -> tuple:
     return _sujos(caminho, env), diff
 
 
-def executar(tarefa_spec: dict) -> dict:
+def _descrever(ferramenta: str, entrada: dict, raiz: Path) -> str:
+    """Uma linha legível do que o agente está fazendo, para o code_status."""
+    def rel(caminho: str) -> str:
+        try:
+            return str(Path(caminho).resolve().relative_to(raiz.resolve()))
+        except (ValueError, OSError):
+            return caminho
+
+    if ferramenta in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+        return f"editando {rel(entrada.get('file_path') or entrada.get('notebook_path', '?'))}"
+    if ferramenta == "Read":
+        return f"lendo {rel(entrada.get('file_path', '?'))}"
+    if ferramenta == "Bash":
+        return f"rodando `{(entrada.get('command') or '')[:80]}`"
+    if ferramenta in ("Grep", "Glob"):
+        return f"procurando {entrada.get('pattern', '')[:60]}"
+    return ferramenta
+
+
+def _rodar_claude(job_id: str, caminho: Path, tarefa: str, continuar: bool, env) -> dict:
+    """Roda o Claude Code acompanhando o fluxo de eventos.
+
+    O stream-json dá três coisas que o texto puro não dava: progresso ao vivo
+    (para o chefe perguntar "como está?"), um veredito de erro confiável, e o
+    id da sessão — que ele pode abrir no terminal para continuar dali.
+    """
+    comando = [
+        "claude", "-p", tarefa,
+        "--output-format", "stream-json", "--verbose",
+        "--permission-mode", "acceptEdits",
+        "--append-system-prompt", INSTRUCOES,
+        "--allowedTools", *TESTES_PERMITIDOS, *GIT_LEITURA,
+    ]
+    if continuar:
+        # Entra na conversa mais recente da pasta — inclusive a que o chefe
+        # tiver aberto no Mac: foi pedido dele, o agente chega sabendo o
+        # contexto. Sem conversa anterior, o Claude Code abre uma nova.
+        comando.insert(1, "--continue")
+
+    proc = subprocess.Popen(
+        comando, cwd=caminho, env=env, text=True, bufsize=1,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        start_new_session=True,   # para poder matar o grupo inteiro no cancelamento
+    )
+    linhas: queue.Queue = queue.Queue()
+
+    def ler():
+        for linha in proc.stdout:
+            linhas.put(linha)
+        linhas.put(None)
+
+    threading.Thread(target=ler, daemon=True).start()
+
+    progresso = {"inicio": time.time(), "acoes": 0, "ultima": "começando", "sessao": ""}
+    arquivo_progresso = RODANDO / f"{job_id}.json"
+    pedido_cancelar = CANCELAR / job_id
+    final, crus, motivo_parada = None, deque(maxlen=8), ""
+    gravado_em, pendente = 0.0, False
+
+    def gravar(forcar=False):
+        # Limita a uma escrita por segundo, mas nunca perde a última: o que
+        # ficou pendente sai na próxima volta do laço, chegue evento ou não —
+        # senão "rodando pytest" nunca aparecia durante os 5 min da suíte.
+        nonlocal gravado_em, pendente
+        pendente = True
+        if forcar or time.time() - gravado_em >= 1:
+            arquivo_progresso.write_text(json.dumps(progresso, ensure_ascii=False), encoding="utf-8")
+            gravado_em, pendente = time.time(), False
+
+    gravar(forcar=True)
+    while True:
+        if pedido_cancelar.exists():
+            motivo_parada = "cancelado"
+        elif time.time() - progresso["inicio"] > TIMEOUT_AGENTE:
+            motivo_parada = "tempo"
+        if motivo_parada:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            break
+        if pendente:
+            gravar()
+        try:
+            linha = linhas.get(timeout=1)
+        except queue.Empty:
+            continue
+        if linha is None:
+            break
+        try:
+            evento = json.loads(linha)
+        except json.JSONDecodeError:
+            if linha.strip():
+                crus.append(linha.strip())
+            continue
+        tipo = evento.get("type")
+        if tipo == "system" and evento.get("subtype") == "init":
+            progresso["sessao"] = evento.get("session_id", "")
+            gravar(forcar=True)
+        elif tipo == "assistant":
+            for bloco in (evento.get("message") or {}).get("content") or []:
+                if bloco.get("type") == "tool_use":
+                    progresso["acoes"] += 1
+                    progresso["ultima"] = _descrever(bloco.get("name", "?"), bloco.get("input") or {}, caminho)
+                    gravar()
+        elif tipo == "result":
+            final = evento
+
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+    arquivo_progresso.unlink(missing_ok=True)
+    pedido_cancelar.unlink(missing_ok=True)
+
+    return {
+        "final": final, "motivo_parada": motivo_parada, "codigo": proc.returncode,
+        "crus": list(crus), "sessao": progresso["sessao"], "acoes": progresso["acoes"],
+        "duracao_s": int(time.time() - progresso["inicio"]),
+    }
+
+
+def executar(tarefa_spec: dict, job_id: str = "manual") -> dict:
     env = _ambiente()
     caminho = Path(tarefa_spec["path"]).expanduser()
     tarefa = tarefa_spec["tarefa"]
-    preferidos = tarefa_spec.get("agentes") or ["claude", "antigravity"]
 
     if not (caminho / ".git").exists():
         return {"ok": False, "resultado": f"{caminho} não é um repositório git."}
+    if not shutil.which("claude", path=env["PATH"]):
+        return {"ok": False, "resultado": "O Claude Code não está instalado (ou fora do PATH) no Mac."}
 
     _, branch = _git(caminho, "rev-parse", "--abbrev-ref", "HEAD", env=env)
     branch = branch.strip()
@@ -172,98 +306,78 @@ def executar(tarefa_spec: dict) -> dict:
             + "\n".join(sujos)[:800])}
 
     antes = _retrato(caminho, env)
-
-    def rodar(nome: str, modelo: list, continuar: bool):
-        comando = [p.replace("{tarefa}", tarefa + PEDIDO_DE_TESTE) for p in modelo]
-        if continuar and CONTINUAR.get(nome):
-            comando.insert(1, CONTINUAR[nome])
-        return subprocess.run(
-            comando, cwd=caminho, capture_output=True, text=True,
-            timeout=TIMEOUT_AGENTE, env=env, stdin=subprocess.DEVNULL,
-        )
-
-    continuar = not tarefa_spec.get("novaSessao")
-    tentativas, usado, resposta, sessao = [], None, "", "nova"
-    for nome in preferidos:
-        modelo = AGENTES.get(nome)
-        if not modelo or not shutil.which(modelo[0], path=env["PATH"]):
-            tentativas.append(f"{nome}: não instalado")
-            continue
-        try:
-            r = rodar(nome, modelo, continuar)
-            saida_agente = (r.stdout + r.stderr).strip()
-            # Primeira tarefa no projeto: não há conversa para continuar.
-            if continuar and r.returncode != 0 and any(
-                s in saida_agente.lower() for s in SEM_CONVERSA
-            ):
-                r = rodar(nome, modelo, False)
-                saida_agente = (r.stdout + r.stderr).strip()
-                sessao = "nova (não havia conversa anterior)"
-            elif continuar:
-                sessao = "continuando a conversa anterior do projeto"
-        except subprocess.TimeoutExpired:
-            tentativas.append(f"{nome}: estourou {TIMEOUT_AGENTE}s")
-            continue
-        if r.returncode == 0:
-            usado, resposta = nome, saida_agente
-            break
-        tentativas.append(f"{nome}: código {r.returncode} — {saida_agente[:200]}")
-
+    r = _rodar_claude(job_id, caminho, tarefa, not tarefa_spec.get("novaSessao"), env)
     depois = _retrato(caminho, env)
     _anotar_estado(caminho, depois[0])
+    mudou = depois != antes
 
-    if not usado:
-        # Não desfazemos nada: um agente que morreu no meio pode ter deixado
-        # edição pela metade, e jogar fora trabalho por conta própria é pior
-        # do que avisar.
-        recado = "Nenhum agente executou. " + "; ".join(tentativas)
-        if depois != antes:
-            recado += "\n(Sobrou alteração pela metade na árvore — dá uma olhada antes.)"
-        return {"ok": False, "resultado": recado}
-
-    if depois == antes:
-        return {"ok": False, "resultado": f"O {usado} rodou mas não mudou arquivo nenhum.\n{resposta[:1200]}"}
-
-    _, diffstat = _git(caminho, "--no-pager", "diff", "--stat", env=env)
-
-    # abre para revisão na tela (aqui dentro da sessão gráfica isso funciona)
-    for abrir in (["code", str(caminho)], ["open", str(caminho)]):
-        if shutil.which(abrir[0], path=env["PATH"]):
-            subprocess.run(abrir, env=env, capture_output=True)
-            break
-
-    return {
-        "ok": True,
-        "agente": usado,
-        "sessao": sessao,
-        "branch": branch,
-        "diffstat": diffstat,
+    final = r["final"] or {}
+    base = {
+        "branch": branch, "sessao": r["sessao"], "acoes": r["acoes"],
+        "duracao_s": r["duracao_s"], "mudou": mudou,
         "desfazer": "git reset --hard && git clean -fd",
-        "resultado": resposta[:2000],
     }
+    # Nunca desfazemos nada sozinhos: um agente parado no meio pode ter
+    # deixado edição pela metade, e jogar trabalho fora é pior que avisar.
+    meio = "\n(Ficou alteração pela metade na árvore — dá uma olhada antes.)" if mudou else ""
+    if r["motivo_parada"] == "cancelado":
+        return {**base, "ok": False, "resultado": "Parei a pedido do chefe." + meio}
+    if r["motivo_parada"] == "tempo":
+        return {**base, "ok": False,
+                "resultado": f"O agente passou de {TIMEOUT_AGENTE // 60} minutos e eu parei." + meio}
+    if not final or final.get("is_error") or r["codigo"] not in (0, None):
+        detalhe = final.get("result") or "\n".join(r["crus"]) or f"código {r['codigo']}"
+        return {**base, "ok": False, "resultado": f"O Claude Code falhou: {detalhe[:800]}" + meio}
+
+    diffstat = ""
+    if mudou:
+        _, diffstat = _git(caminho, "--no-pager", "diff", "--stat", env=env)
+        # abre para revisão na tela (aqui dentro da sessão gráfica isso funciona)
+        for abrir in (["code", str(caminho)], ["open", str(caminho)]):
+            if shutil.which(abrir[0], path=env["PATH"]):
+                subprocess.run(abrir, env=env, capture_output=True)
+                break
+
+    # Não mudar nada é resultado legítimo: "estuda o projeto" e "o que esse
+    # módulo faz?" são pedidos de verdade, e a resposta é o próprio entregável.
+    return {**base, "ok": True, "diffstat": diffstat,
+            "turnos": final.get("num_turns"), "resultado": (final.get("result") or "")[:3000]}
+
+
+def _faxina():
+    agora = time.time()
+    for velho in PRONTOS.glob("*.json"):
+        if agora - velho.stat().st_mtime > RETENCAO_PRONTOS:
+            velho.unlink(missing_ok=True)
+    # Nada roda no boot do executor: progresso e cancelamentos que sobraram
+    # são de uma execução que morreu junto com ele.
+    for sobra in list(RODANDO.glob("*.json")) + list(CANCELAR.glob("*")):
+        sobra.unlink(missing_ok=True)
 
 
 def main():
-    for pasta in (PENDENTES, PRONTOS):
+    for pasta in (PENDENTES, PRONTOS, RODANDO, CANCELAR):
         pasta.mkdir(parents=True, exist_ok=True)
+    _faxina()
     print(f"executor do JARVIS no ar, vigiando {PENDENTES}", flush=True)
     while True:
-        for arquivo in sorted(PENDENTES.glob("*.json")):
+        for arquivo in sorted(PENDENTES.glob("*.json"), key=lambda a: a.stat().st_mtime):
             try:
                 spec = json.loads(arquivo.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+            except (OSError, json.JSONDecodeError):
                 arquivo.unlink(missing_ok=True)
                 continue
             arquivo.unlink(missing_ok=True)
-            print(f"executando {arquivo.stem}: {spec.get('tarefa', '')[:60]}", flush=True)
+            print(f"{time.strftime('%F %T')} executando {arquivo.stem}: "
+                  f"{spec.get('tarefa', '')[:60]}", flush=True)
             try:
-                resultado = executar(spec)
+                resultado = executar(spec, arquivo.stem)
             except Exception as exc:
                 resultado = {"ok": False, "resultado": f"{type(exc).__name__}: {exc}"}
             (PRONTOS / arquivo.name).write_text(
                 json.dumps(resultado, ensure_ascii=False), encoding="utf-8"
             )
-            print(f"concluído {arquivo.stem}: ok={resultado.get('ok')}", flush=True)
+            print(f"{time.strftime('%F %T')} concluído {arquivo.stem}: ok={resultado.get('ok')}", flush=True)
         time.sleep(2)
 
 

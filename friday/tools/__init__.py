@@ -125,6 +125,7 @@ def build_tools(config: "Config") -> dict[str, Tool]:
 
             add(coder.CODAR_TOOL)
             add(coder.STATUS_TOOL)
+            add(coder.CANCEL_TOOL)
         if any(m.mac_address for m in config.machines.values()):
             add(remote.WAKE_TOOL)
 

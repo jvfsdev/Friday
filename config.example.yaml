@@ -130,12 +130,6 @@ routines:
 #     machine: mac
 #     path: /Users/jvfs/Documents/repos/Friday
 
-# Ordem de preferência entre os agentes de código do Mac (modo "auto").
-# Os COMANDOS de cada agente ficam em scripts/mac_runner.py, no Mac — é lá
-# que moram as permissões (quais testes ele pode rodar) e o --continue.
-# code:
-#   order: [claude, antigravity]
-
 # Servidores MCP plugáveis: qualquer servidor Model Context Protocol vira
 # ferramenta do JARVIS (requer: pip install -e ".[mcp]"). Segredos ficam no
 # .env — o servidor filho herda o ambiente do JARVIS automaticamente.

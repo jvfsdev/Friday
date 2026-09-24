@@ -21,9 +21,11 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <!-- Em ~/Library/Logs e não em /tmp: o /tmp some a cada reinício, e era
+       justamente depois de um problema que o log fazia falta. -->
   <key>StandardOutPath</key>
-  <string>/tmp/jarvis-runner.log</string>
+  <string>/Users/jvfs/Library/Logs/jarvis-runner.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/jarvis-runner.log</string>
+  <string>/Users/jvfs/Library/Logs/jarvis-runner.log</string>
 </dict>
 </plist>

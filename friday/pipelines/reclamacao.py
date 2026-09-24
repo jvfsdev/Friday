@@ -112,7 +112,9 @@ class PipelineReclamacao:
         from ..tools.coder import _executar
 
         spec = self.config.code_projects[projeto]
-        resultado = await _executar(self.config, projeto, spec, tarefa, "auto")
+        # Sessão nova: a correção de um cliente não tem nada a ver com a
+        # conversa que o chefe estiver tendo com o Claude Code naquela pasta.
+        resultado = await _executar(self.config, projeto, spec, tarefa, nova_sessao=True)
         if rascunho:
             resultado += (
                 "\n\n✉️ Rascunho de resposta ao cliente (revise e me peça para enviar):\n"
