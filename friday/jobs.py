@@ -18,6 +18,14 @@ log = logging.getLogger("friday.jobs")
 MAX_HISTORICO = 40
 
 
+class TrabalhoFalhou(Exception):
+    """Falha prevista, com mensagem já pronta para o chefe ler.
+
+    Diferente de um bug: vai sem o nome da exceção na frente e sem
+    traceback no log — "o agente parou a seu pedido" não é defeito.
+    """
+
+
 @dataclass
 class Job:
     id: str
@@ -56,6 +64,10 @@ class JobRegistry:
         except asyncio.CancelledError:
             job.status = "cancelado"
             raise
+        except TrabalhoFalhou as exc:
+            log.warning("job %s falhou: %s", job.id, exc)
+            job.status = "falhou"
+            job.result = str(exc)
         except Exception as exc:
             log.exception("job %s falhou", job.id)
             job.status = "falhou"

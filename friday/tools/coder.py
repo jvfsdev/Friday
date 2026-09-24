@@ -25,6 +25,7 @@ import uuid
 
 import asyncssh
 
+from ..jobs import TrabalhoFalhou
 from . import Tool, ToolContext, truncate
 
 log = logging.getLogger("friday.coder")
@@ -54,7 +55,7 @@ class _Mac:
     def __init__(self, config, machine: str):
         spec = config.machines.get(machine)
         if not spec:
-            raise RuntimeError(f"máquina '{machine}' não configurada")
+            raise TrabalhoFalhou(f"máquina '{machine}' não configurada")
         self.spec = spec
         self.nome = machine
         self.conn = None
@@ -115,14 +116,14 @@ async def _executar(config, projeto: str, spec: dict, tarefa: str,
             entrada=payload,
         )
         if code != 0:
-            raise RuntimeError(f"não consegui enviar a tarefa para o {mac.nome}: {saida[:300]}")
+            raise TrabalhoFalhou(f"não consegui enviar a tarefa para o {mac.nome}: {saida[:300]}")
         resultado = await _acompanhar(mac, mac_id)
         await mac.run(f"rm -f {FILA}/done/{mac_id}.json")
     finally:
         mac.fechar()
 
     if not resultado.get("ok"):
-        raise RuntimeError(resultado.get("resultado") or "sem detalhes do Mac")
+        raise TrabalhoFalhou(resultado.get("resultado") or "sem detalhes do Mac")
     return _relatorio(projeto, resultado)
 
 
@@ -140,7 +141,7 @@ async def _acompanhar(mac: _Mac, mac_id: str) -> dict:
             sem_contato_desde = sem_contato_desde or agora
             log.warning("sem contato com o %s (%s) — seguindo", mac.nome, exc)
             if agora - sem_contato_desde > SEM_CONTATO_MAX:
-                raise RuntimeError(
+                raise TrabalhoFalhou(
                     f"perdi o contato com o {mac.nome} há mais de {SEM_CONTATO_MAX // 60} min. "
                     "O agente pode ter terminado lá mesmo assim — o resultado fica em "
                     f"~/.jarvis/jobs/done/{mac_id}.json"
@@ -152,20 +153,20 @@ async def _acompanhar(mac: _Mac, mac_id: str) -> dict:
             try:
                 return json.loads(resto)
             except json.JSONDecodeError:
-                raise RuntimeError(f"resposta ilegível do executor: {resto[:300]}")
+                raise TrabalhoFalhou(f"resposta ilegível do executor: {resto[:300]}")
         if estado == "NA_FILA":
             rodando = resto.strip() not in ("", "0")
             if not rodando and agora - entrou > EXECUTOR_PARADO:
-                raise RuntimeError(
+                raise TrabalhoFalhou(
                     f"a tarefa está parada na fila do {mac.nome} sem nada rodando na frente — "
                     "o executor do JARVIS está no ar? (`launchctl list | grep jarvis` no Mac)"
                 )
             if agora - entrou > ESPERA_NA_FILA:
-                raise RuntimeError(f"a tarefa ficou {ESPERA_NA_FILA // 3600}h na fila do {mac.nome}")
+                raise TrabalhoFalhou(f"a tarefa ficou {ESPERA_NA_FILA // 3600}h na fila do {mac.nome}")
             continue
         comecou = comecou or agora
         if agora - comecou > TIMEOUT_AGENTE + FOLGA:
-            raise RuntimeError(
+            raise TrabalhoFalhou(
                 f"o {mac.nome} não devolveu o resultado em {(TIMEOUT_AGENTE + FOLGA) // 60} min"
             )
 
