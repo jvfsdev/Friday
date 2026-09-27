@@ -48,29 +48,45 @@ class Notifier:
 
         if not self.config.ha_token:
             return
+        dados = {"message": text[:900], "title": "JARVIS"}
+        if critico:
+            # canal de alarme no Android / alerta crítico no iOS
+            dados["data"] = {
+                "ttl": 0, "priority": "high",
+                "channel": "alarm_stream",
+                "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0}},
+            }
         async with httpx.AsyncClient(timeout=15) as client:
             cabecalho = {"Authorization": f"Bearer {self.config.ha_token}"}
-            if not self._servicos_push:
-                resp = await client.get(f"{self.config.ha_url}/api/services", headers=cabecalho)
-                resp.raise_for_status()
-                for dominio in resp.json():
-                    if dominio.get("domain") == "notify":
-                        self._servicos_push = [
-                            s for s in dominio.get("services", {}) if s.startswith("mobile_app_")
-                        ]
-            for servico in self._servicos_push:
-                dados = {"message": text[:900], "title": "JARVIS"}
-                if critico:
-                    # canal de alarme no Android / alerta crítico no iOS
-                    dados["data"] = {
-                        "ttl": 0, "priority": "high",
-                        "channel": "alarm_stream",
-                        "push": {"sound": {"name": "default", "critical": 1, "volume": 1.0}},
-                    }
-                await client.post(
-                    f"{self.config.ha_url}/api/services/notify/{servico}",
-                    headers=cabecalho, json=dados,
-                )
+            # O nome do serviço muda quando o app do celular é reinstalado
+            # (mobile_app_poco -> mobile_app_poco_f5). Com a lista guardada
+            # para sempre, o aviso urgente ia para um serviço que não existe
+            # e se perdia calado. Falhou: redescobre e tenta de novo, uma vez.
+            for tentativa in (1, 2):
+                if not self._servicos_push:
+                    resp = await client.get(f"{self.config.ha_url}/api/services", headers=cabecalho)
+                    resp.raise_for_status()
+                    for dominio in resp.json():
+                        if dominio.get("domain") == "notify":
+                            self._servicos_push = [
+                                s for s in dominio.get("services", {}) if s.startswith("mobile_app_")
+                            ]
+                    if not self._servicos_push:
+                        log.warning("nenhum celular com o app do Home Assistant para avisar")
+                        return
+                falhas = []
+                for servico in self._servicos_push:
+                    resp = await client.post(
+                        f"{self.config.ha_url}/api/services/notify/{servico}",
+                        headers=cabecalho, json=dados,
+                    )
+                    if resp.status_code >= 400:
+                        falhas.append(f"{servico}: {resp.status_code}")
+                if not falhas:
+                    return
+                log.warning("push no celular falhou (%s) — redescobrindo", ", ".join(falhas))
+                self._servicos_push = []
+            raise RuntimeError(f"não consegui notificar o celular: {', '.join(falhas)}")
 
     async def send(self, text: str, urgency: str = "normal", critical: bool = False):
         """Escada de urgência:
