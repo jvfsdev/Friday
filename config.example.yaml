@@ -49,6 +49,11 @@ monitors:
     path: /
     threshold_percent: 90
     interval_minutes: 60
+  # fluxo-de-caixa:          # avisa ANTES de faltar dinheiro nas contas
+  #   check: fluxo_caixa     # (precisa do openfinance em mcp_servers)
+  #   dias: 45               # horizonte da projeção
+  #   urgency: high
+  #   interval_minutes: 720  # cada checagem sincroniza com o banco
   # servico-docker:          # alerta quando um comando falha (código != 0)
   #   check: command
   #   command: systemctl is-active docker

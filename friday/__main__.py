@@ -48,6 +48,9 @@ async def run_cli(config):
         from .mcp_bridge import McpBridge
 
         tools.update(await McpBridge(config).start())
+    from .tools import caixa
+
+    caixa.registrar(tools)   # depende do Open Finance, que vem pelo MCP
     brain = Brain(config, tools, ctx)
 
     notifier = Notifier(config, send)
@@ -99,6 +102,9 @@ async def run_telegram(config):
         from .mcp_bridge import McpBridge
 
         tools.update(await McpBridge(config).start())
+    from .tools import caixa
+
+    caixa.registrar(tools)   # depende do Open Finance, que vem pelo MCP
     brain = Brain(config, tools, ctx)
     interface.brain = brain
 

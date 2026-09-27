@@ -18,6 +18,13 @@ log = logging.getLogger("friday.monitor")
 # Rede oscila; três seguidas já não é oscilação.
 FALHAS_ATE_AVISAR = 3
 
+PROMPT_FLUXO = (
+    "Projeção de fluxo de caixa do chefe, calculada em código — NÃO recalcule "
+    "nada. Avise em poucas linhas: o veredito com os números EXATOS, o dia "
+    "crítico e o que dá para fazer (quanto trazer para a conta e até quando, "
+    "ou segurar o cartão até o fechamento). Sem repetir a linha do tempo"
+)
+
 
 async def _run_quiet(command: str, timeout: int = 30) -> tuple[int, str]:
     proc = await asyncio.create_subprocess_shell(
@@ -189,6 +196,30 @@ class _GmailCheck:
         return True, f"email(s) novo(s): {descricao}"
 
 
+class _FluxoCaixaCheck:
+    """Projeta o saldo das contas e avisa antes de faltar dinheiro.
+
+    Nível 1 = pode faltar (no ritmo de gasto recente); 2 = vai faltar (mesmo
+    sem nenhuma compra a mais). A conta é toda do friday/fluxo.py.
+    params: dias (horizonte, padrão 45).
+    """
+
+    def __init__(self, config: Config, brain):
+        self.config = config
+        self.brain = brain
+
+    async def __call__(self, params: dict) -> tuple[bool, str, int]:
+        from . import fluxo
+
+        sync = self.brain.tools.get("openfinance_sync")
+        p = await fluxo.projecao_atual(
+            self.config, sincronizar=sync.handler if sync else None,
+            dias=int(params.get("dias") or fluxo.HORIZONTE_PADRAO),
+        )
+        nivel = 2 if p.falta_certa else 1 if p.fica_negativo else 0
+        return nivel > 0, fluxo.resumo(p), nivel
+
+
 class _HaStateCheck:
     """Dispara quando uma entidade do Home Assistant entra no estado configurado.
 
@@ -230,7 +261,9 @@ class FridayMonitor:
         self.send = send
         self.scheduler = scheduler
         self.pipelines = pipelines or {}
-        self._state: dict[str, bool] = {}
+        # Nível de gravidade por monitor: 0 = ok, 1 = problema; checagens que
+        # sabem graduar (ex.: "pode faltar" 1, "vai faltar" 2) devolvem mais.
+        self._state: dict[str, int] = {}
         self._checks: dict[str, object] = {}  # instâncias com memória, por monitor
         self._falhas: dict[str, int] = {}     # checagens seguidas que não completaram
         self._cegueira_avisada: set[str] = set()  # monitores cuja cegueira já foi reportada
@@ -332,6 +365,20 @@ class FridayMonitor:
             if spec.name not in self._checks:
                 self._checks[spec.name] = _GmailCheck(self.config)
             return self._checks[spec.name]
+        if spec.check == "fluxo_caixa":
+            from . import fluxo
+
+            if not fluxo._dist_do_openfinance(self.config):
+                return None
+            spec.params.setdefault("prompt", PROMPT_FLUXO)
+            spec.params.setdefault("icon", "💰")
+            spec.params.setdefault("persistir_estado", True)
+            # o "normalizado" levaria a projeção inteira crua; o chefe já sabe
+            # que resolveu quando trouxe o dinheiro
+            spec.params.setdefault("notify_recovery", False)
+            if spec.name not in self._checks:
+                self._checks[spec.name] = _FluxoCaixaCheck(self.config, self.brain)
+            return self._checks[spec.name]
         if spec.check == "ha_state":
             if not self.config.ha_token:
                 return None
@@ -340,7 +387,36 @@ class FridayMonitor:
             return self._checks[spec.name]
         return CHECKS.get(spec.check)
 
+    def _arquivo_niveis(self):
+        from .config import ROOT
+
+        return ROOT / "state" / "monitores_nivel.json"
+
+    def _carregar_niveis(self):
+        import json
+
+        try:
+            self._state.update(json.loads(self._arquivo_niveis().read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    def _salvar_nivel(self, nome: str, nivel: int):
+        """Só para monitores que pedem (persistir_estado): um "pode faltar
+        dinheiro" dura semanas, e sem isto cada reinício do serviço — todo
+        deploy — repetia o aviso como se fosse novo."""
+        import json
+
+        caminho = self._arquivo_niveis()
+        try:
+            atuais = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            atuais = {}
+        atuais[nome] = nivel
+        caminho.parent.mkdir(exist_ok=True)
+        caminho.write_text(json.dumps(atuais), encoding="utf-8")
+
     def start(self):
+        self._carregar_niveis()
         for spec in self.config.monitors:
             if self._check_for(spec) is None:
                 log.warning("monitor '%s': tipo '%s' desconhecido ou sem HA configurado — ignorado",
@@ -369,7 +445,9 @@ class FridayMonitor:
 
     async def _run(self, spec: MonitorSpec):
         try:
-            problem, detail = await self._check_for(spec)(spec.params)
+            resultado = await self._check_for(spec)(spec.params)
+            problem, detail = resultado[0], resultado[1]
+            nivel = int(resultado[2]) if len(resultado) > 2 else int(bool(problem))
             if self._falhas.pop(spec.name, 0) and spec.name in self._cegueira_avisada:
                 self._cegueira_avisada.discard(spec.name)
                 await self._avisar(f"👁️ Voltei a enxergar o monitor '{spec.name}'.")
@@ -406,11 +484,17 @@ class FridayMonitor:
                 if self.remover(spec.name):
                     await self.send(f"⏳ Monitor '{spec.name}' expirou e foi removido.")
                 return
-        previous = self._state.get(spec.name)
-        self._state[spec.name] = problem
+        anterior = int(self._state.get(spec.name) or 0)
+        self._state[spec.name] = nivel
+        if spec.params.get("persistir_estado") and nivel != anterior:
+            self._salvar_nivel(spec.name, nivel)
         self._update_face()
+        # Avisa quando o nível SOBE — não só quando o problema aparece. Assim
+        # "pode faltar dinheiro" que vira "vai faltar" gera um segundo aviso,
+        # e o mesmo problema parado não repete a cada ciclo.
+        piorou = nivel > anterior
         try:
-            if problem and previous is not True and spec.params.get("pipeline"):
+            if piorou and spec.params.get("pipeline"):
                 # Evento vai para um roteiro próprio (ex.: reclamação de cliente).
                 pipeline = self.pipelines.get(spec.params["pipeline"])
                 if pipeline:
@@ -418,7 +502,7 @@ class FridayMonitor:
                     return
                 log.warning("pipeline '%s' não registrado", spec.params["pipeline"])
 
-            if problem and previous is not True:
+            if piorou:
                 # Só aqui a IA entra: avaliar o evento e avisar com contexto.
                 icone = spec.params.get("icon", "🚨")
                 instrucao = spec.params.get(
@@ -426,6 +510,8 @@ class FridayMonitor:
                     f"Alerta do monitor '{spec.name}' — detectado agora, avise o chefe "
                     "de forma útil e sugira o que fazer",
                 )
+                if anterior > 0:
+                    instrucao += " (a situação PIOROU desde o último aviso — diga isso)"
                 try:
                     answer = await self.brain.ask(f"[{instrucao}] {detail}", propagar_erro=True)
                 except Exception as exc:
@@ -437,7 +523,7 @@ class FridayMonitor:
                 if spec.params.get("uma_vez") and self.remover(spec.name):
                     await self.send(f"✔️ Era isso que eu estava vigiando — "
                                     f"encerrei o monitor '{spec.name}'.")
-            elif not problem and previous is True and spec.params.get("notify_recovery", True):
+            elif nivel == 0 and anterior > 0 and spec.params.get("notify_recovery", True):
                 await self.send(f"✅ Monitor '{spec.name}': normalizado ({detail}).")
         except Exception:
             log.exception("falha ao avisar sobre o monitor '%s'", spec.name)

@@ -21,6 +21,7 @@ OBRIGATORIOS = {
     "ping": ("host",),
     "command": ("command",),
     "disk": (),
+    "fluxo_caixa": (),
 }
 
 
@@ -105,7 +106,7 @@ CRIAR_TOOL = Tool(
             "type": "OBJECT",
             "properties": {
                 "nome": {"type": "STRING", "description": "Curto e descritivo: 'email-bolsa'."},
-                "tipo": {"type": "STRING", "description": "gmail, drive_folder, ha_state, ping, command, disk"},
+                "tipo": {"type": "STRING", "description": "gmail, drive_folder, ha_state, ping, command, disk, fluxo_caixa (avisa antes de faltar dinheiro nas contas; checar a cada 720 min basta)"},
                 "prompt": {"type": "STRING", "description": "O que você deve fazer/dizer quando disparar."},
                 "intervalo_minutos": {"type": "INTEGER", "description": "De quanto em quanto tempo checar (padrão 5)."},
                 "urgencia": {"type": "STRING", "description": "normal, high, critical ou decision."},
