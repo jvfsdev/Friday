@@ -311,6 +311,7 @@ class FridayMonitor:
         self.scheduler.add_job(
             self._run, "interval", minutes=spec.interval_minutes,
             args=[spec], id=f"monitor-{spec.name}", replace_existing=True,
+            **self._primeira_rodada(spec),
         )
         self.dinamicos[spec.name] = spec
         if persistir:
@@ -415,6 +416,17 @@ class FridayMonitor:
         caminho.parent.mkdir(exist_ok=True)
         caminho.write_text(json.dumps(atuais), encoding="utf-8")
 
+    @staticmethod
+    def _primeira_rodada(spec: MonitorSpec) -> dict:
+        """Monitor de intervalo longo (12 h) com estado salvo roda logo ao
+        subir: esperar meio dia pela primeira leitura não serve, e o nível
+        salvo impede que o reinício repita um aviso já dado."""
+        if not spec.params.get("persistir_estado"):
+            return {}
+        from datetime import datetime, timedelta
+
+        return {"next_run_time": datetime.now().astimezone() + timedelta(seconds=30)}
+
     def start(self):
         self._carregar_niveis()
         for spec in self.config.monitors:
@@ -429,6 +441,7 @@ class FridayMonitor:
                 args=[spec],
                 id=f"monitor-{spec.name}",
                 replace_existing=True,   # start() duas vezes não pode explodir
+                **self._primeira_rodada(spec),
             )
             log.info("monitor '%s' ativo (%s, a cada %s min)", spec.name, spec.check, spec.interval_minutes)
         self._carregar_dinamicos()

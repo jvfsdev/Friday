@@ -52,8 +52,9 @@ monitors:
   # fluxo-de-caixa:          # avisa ANTES de faltar dinheiro nas contas
   #   check: fluxo_caixa     # (precisa do openfinance em mcp_servers)
   #   dias: 45               # horizonte da projeção
-  #   urgency: high
   #   interval_minutes: 720  # cada checagem sincroniza com o banco
+  #   (urgência normal de propósito: avisa com dias de antecedência, não é
+  #    motivo para notificação no celular — e respeita o horário de silêncio)
   # servico-docker:          # alerta quando um comando falha (código != 0)
   #   check: command
   #   command: systemctl is-active docker
