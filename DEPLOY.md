@@ -201,11 +201,15 @@ pelo Porcupine no `friday/voice.py`).
 
 ## 9b. Rosto na tela (pygame, sem navegador)
 
-O orbe animado do JARVIS renderizado nativamente (~50 MB de RAM — feito para
-o notebook velho). Estados (repouso/ouvindo/pensando/falando), legendas do
-que ele entendeu/respondeu, HUD com relógio e monitores, e modo noturno
-automático (no quiet_hours vira só um relógio fraco).
+O rosto do JARVIS renderizado nativamente (~50 MB de RAM — feito para o
+notebook velho), na identidade editorial descrita em
+[docs/identidade-visual.md](docs/identidade-visual.md). Cada estado tem seu
+fundo chapado: repouso (papel: relógio grande, clima, agenda do dia),
+ouvindo (laranja), pensando e falando (tinta, com a frase grande aparecendo
+no ritmo da fala). No quiet_hours vira só um relógio quase apagado. Clima e
+agenda chegam do processo principal a cada 10 min (friday/face_dados.py).
 
+0. Fonte: `sudo apt install -y fonts-inter` (sem ela o rosto cai na DejaVu).
 1. `.venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[face]"`
    Se o pip não achar o pygame ("No matching distribution"), use o da distro:
    ```bash
@@ -213,7 +217,8 @@ automático (no quiet_hours vira só um relógio fraco).
    # recria o venv enxergando os pacotes do sistema:
    python3 -m venv --system-site-packages --upgrade .venv
    ```
-2. Preview local: `python -m friday.face --window --demo` (ESC sai).
+2. Preview local: `python -m friday.face --window --demo` (ESC sai), ou
+   `python -m friday.face --foto /tmp/rosto` para salvar um PNG de cada estado.
 3. Como serviço (tela do notebook ligada direto, sem desktop):
    ```bash
    sudo usermod -aG video,render $USER   # acesso ao framebuffer (relogar depois)

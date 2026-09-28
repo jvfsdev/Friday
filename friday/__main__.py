@@ -120,6 +120,16 @@ async def run_telegram(config):
     scheduler.start()
     notifier.attach(scheduler.scheduler)
 
+    # clima e agenda para a tela de repouso do rosto
+    from datetime import datetime, timedelta
+
+    from . import face_dados
+
+    scheduler.scheduler.add_job(
+        face_dados.atualizar, "interval", minutes=10, args=[config], id="rosto-dados",
+        replace_existing=True, next_run_time=datetime.now().astimezone() + timedelta(seconds=20),
+    )
+
     from .pipelines.reclamacao import PipelineReclamacao
 
     pipelines = {
