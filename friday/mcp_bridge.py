@@ -1,4 +1,4 @@
-"""Ponte MCP: pluga servidores Model Context Protocol como ferramentas do JARVIS.
+"""Ponte MCP: pluga servidores Model Context Protocol como ferramentas do Guará.
 
 Qualquer servidor MCP (ex.: openfinance-analyst) vira um bloco no config.yaml:
 

@@ -1,4 +1,4 @@
-"""Estados que o JARVIS liga e desliga a pedido do chefe (não perturbe etc.)."""
+"""Estados que o Guará liga e desliga a pedido do chefe (não perturbe etc.)."""
 
 from __future__ import annotations
 

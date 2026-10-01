@@ -1,4 +1,4 @@
-"""O JARVIS cria e remove seus próprios vigias, a pedido do chefe.
+"""O Guará cria e remove seus próprios vigias, a pedido do chefe.
 
 "me avisa quando chegar o email da bolsa" vira um monitor de Gmail que se
 apaga sozinho depois de avisar. Sem editar config, sem reiniciar serviço.

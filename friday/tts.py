@@ -1,4 +1,4 @@
-"""A voz do JARVIS, com motores plugáveis.
+"""A voz do Guará, com motores plugáveis.
 
 Medido no servidor (AMD E-300, sem AVX/SSE4.2), por frase:
   edge   ~1,4s  neural, natural, precisa de internet

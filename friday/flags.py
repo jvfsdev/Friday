@@ -1,4 +1,4 @@
-"""Estados que o JARVIS liga e desliga sozinho, a pedido do chefe.
+"""Estados que o Guará liga e desliga sozinho, a pedido do chefe.
 
 O primeiro é o não perturbe: "vou entrar numa reunião" desliga ligação e
 alerta crítico e deixa só a mensagem no Telegram, sem o chefe precisar mexer

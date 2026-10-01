@@ -62,7 +62,7 @@ async def run_cli(config):
     monitor.start()
     ctx.monitor = monitor
 
-    console.print("[bold cyan]JARVIS[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
+    console.print("[bold cyan]Guará[/] online. ('sair' para encerrar, '/reset' para zerar)\n")
     while True:
         try:
             user = (await asyncio.to_thread(input, "você> ")).strip()
@@ -137,9 +137,9 @@ async def run_telegram(config):
     }
     monitor = FridayMonitor(config, brain, notifier.send, scheduler.scheduler, pipelines)
     monitor.start()
-    ctx.monitor = monitor   # o JARVIS passa a poder criar os próprios vigias
+    ctx.monitor = monitor   # o Guará passa a poder criar os próprios vigias
 
-    # ferramenta de escalada para o próprio JARVIS subir o tom
+    # ferramenta de escalada para o próprio Guará subir o tom
     async def _escalate(tool_ctx, message: str, level: str = "high") -> str:
         await notifier.send(message, urgency=level)
         return f"Avisei o chefe no nível '{level}'."

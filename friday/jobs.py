@@ -1,7 +1,7 @@
 """Trabalhos longos em segundo plano.
 
 Uma tarefa de código pode levar 20 minutos; o cérebro não pode ficar preso
-esperando. O JARVIS responde "estou cuidando disso" na hora e avisa quando
+esperando. O Guará responde "estou cuidando disso" na hora e avisa quando
 termina, com o resultado.
 """
 

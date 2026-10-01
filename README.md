@@ -1,6 +1,8 @@
 # Projeto Friday 🤖
 
-Assistente pessoal autônomo auto-hospedado — ele atende por **JARVIS** (persona em `JARVIS.md`; wake word de voz: "hey Jarvis").
+Assistente pessoal auto-hospedado — ele atende por **Guará**: sarcástico, caloroso e direto (persona em `GUARA.md`, identidade visual em `docs/identidade-visual.md`).
+
+> A palavra de ativação da voz ainda é **"hey Jarvis"**: é o modelo pronto do openWakeWord. O "Ô, Guará" depende de treinar um modelo próprio — é o próximo passo do projeto.
 
 - **Cérebro**: Gemini Flash (API gratuita) com function calling
 - **Interface**: bot no Telegram (só responde ao dono) + modo `--cli` para testes

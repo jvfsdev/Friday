@@ -1,7 +1,7 @@
 [project]
 name = "friday"
 version = "0.1.0"
-description = "Friday — assistente pessoal autônoma auto-hospedada (estilo JARVIS)"
+description = "Guará — assistente pessoal auto-hospedado, sarcástico e caloroso"
 requires-python = ">=3.11"
 dependencies = [
     "google-genai>=1.0",

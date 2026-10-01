@@ -1,11 +1,11 @@
 """Ligações telefônicas com conversa livre (Twilio).
 
-O JARVIS liga quando precisa de uma decisão do chefe. A conversa é por voz,
+O Guará liga quando precisa de uma decisão do chefe. A conversa é por voz,
 sem menu de dígitos: o Twilio transcreve a fala, o texto vai para uma sessão
 dedicada do modelo e a resposta volta como fala.
 
 Trava de segurança dentro da conversa livre: antes de executar qualquer ação
-o JARVIS repete o que entendeu e espera um "sim" final. O modelo marca o
+o Guará repete o que entendeu e espera um "sim" final. O modelo marca o
 desfecho com [AUTORIZADO], [NEGADO] ou [FIM], que é o que o código obedece —
 nunca a interpretação livre do texto.
 """
@@ -19,7 +19,9 @@ from xml.sax.saxutils import escape
 
 log = logging.getLogger("friday.phone")
 
-INSTRUCOES = """Você é o JARVIS falando ao TELEFONE com o chefe. Regras:
+INSTRUCOES = """Você é o Guará falando ao TELEFONE com o João. Se você ligou, é
+porque precisa de uma decisão: aqui o sarcasmo fica de fora — seja caloroso,
+direto e claro. Regras:
 - Frases curtas e naturais: isso vira voz, não texto.
 - Comece explicando em uma ou duas frases por que ligou.
 - Se ele autorizar uma ação, REPITA o que entendeu e peça a confirmação final.

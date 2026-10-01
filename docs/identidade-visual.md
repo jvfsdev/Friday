@@ -1,4 +1,4 @@
-# Identidade visual do JARVIS
+# Identidade visual do Guará
 
 Editorial e chapada — cara de pôster e de revista, não de "tela de IA".
 Vale para tudo que for visual: o rosto na tela da sala (`friday/face.py`),
@@ -38,10 +38,27 @@ Cores chapadas. **Zero brilho, degradê ou sombra.**
 - Texto corrido: Inter Bold/SemiBold.
 - Mono (DejaVu Sans Mono / Menlo) só para rótulos pequenos em caixa alta.
 
+## Nome
+
+**Guará**, como o lobo-guará: o bicho mais laranja do Brasil — desconfiado,
+meio desengonçado, independente, e muito mais esperto do que parece.
+Escreve-se com acento; em identificadores técnicos, `guara`.
+
 ## Marca
 
-Um círculo sólido (tinta no papel, papel na tinta) com um ponto laranja no
-canto superior direito, que pulsa devagar — é o "coração" dele.
+A cabeça do lobo-guará em geometria chapada: orelhas enormes, rosto que
+afina num focinho comprido, **um olho só** (a piscadela de quem acabou de
+ser irônico). A forma está em `friday/face.py` (`CABECA`, `FOCINHO`).
+
+| Fundo | Cabeça | Focinho | Olho |
+|---|---|---|---|
+| Papel (principal) | laranja | tinta | tinta |
+| Tinta | papel | — | laranja |
+| Laranja | tinta | — | papel |
+
+Em fundo claro é o bicho; em fundo escuro ou laranja vira silhueta, e o
+olho é o único ponto de cor. No rosto da sala, ele pisca a cada ~5 s.
+O nome acompanha a marca em Inter Display Black: **Guará**.
 
 ## Movimento
 
@@ -51,5 +68,6 @@ canto superior direito, que pulsa devagar — é o "coração" dele.
 
 ## Voz do texto
 
-Curta e humana: "Pode falar.", "Um instante.", "Vai sobrar?",
-"Ele cuida do resto." Nada de "assistente pessoal autônomo".
+Curta, humana, com uma pontinha de ironia: "Pode falar.", "Um instante.",
+"Vai sobrar?", "Ele cuida do resto." Nada de "assistente pessoal
+autônomo". A personalidade completa está em `GUARA.md`.

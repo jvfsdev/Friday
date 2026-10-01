@@ -48,7 +48,7 @@ class Notifier:
 
         if not self.config.ha_token:
             return
-        dados = {"message": text[:900], "title": "JARVIS"}
+        dados = {"message": text[:900], "title": "Guará"}
         if critico:
             # canal de alarme no Android / alerta crítico no iOS
             dados["data"] = {

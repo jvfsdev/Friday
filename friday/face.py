@@ -1,10 +1,10 @@
-"""O rosto do JARVIS na tela da sala, desenhado nativamente com pygame.
+"""O rosto do Guará na tela da sala, desenhado nativamente com pygame.
 
 Estética editorial (a mesma dos vídeos): cor chapada, tipografia enorme,
 nada de brilho, degradê ou partícula. Cada estado tem o seu fundo, e a troca
 entre eles é o fundo novo varrendo a tela de baixo para cima:
 
-    repouso   papel  — relógio grande, clima, agenda, marca pulsando
+    repouso   papel  — relógio grande, clima, agenda, o guará piscando
     ouvindo   laranja — "Pode falar." (dá para ver do outro lado da sala)
     pensando  tinta  — "Um instante." e três blocos laranja
     falando   tinta  — a frase, grande, aparecendo no ritmo da fala
@@ -44,6 +44,12 @@ LARANJA = (255, 90, 31)
 CINZA = (140, 135, 125)
 NOITE = (58, 56, 51)
 
+# A marca: cabeça do lobo-guará em unidades de "raio" (ver Face.marca).
+CABECA = [(-.92, -1.62), (-.2, -.52), (.2, -.52), (.92, -1.62), (.8, -.32), (.6, .12),
+          (.15, 1.02), (0, 1.1), (-.15, 1.02), (-.6, .12), (-.8, -.32)]
+FOCINHO = [(-.33, .5), (.33, .5), (.15, 1.02), (0, 1.1), (-.15, 1.02)]
+PISCA_A_CADA = 5.5     # segundos entre uma piscadela e outra
+
 FUNDO = {"idle": PAPEL, "listening": LARANJA, "thinking": TINTA, "speaking": TINTA, "night": TINTA}
 VARRE = 0.3            # segundos da troca de fundo
 ENTRA = 0.4            # segundos do texto subindo pela máscara
@@ -54,7 +60,7 @@ PESOS = {"black": "InterDisplay-Black.otf", "extra": "InterDisplay-ExtraBold.otf
          "bold": "Inter-Bold.otf", "semi": "Inter-SemiBold.otf"}
 
 DEMO_CICLO = [("idle", ""), ("listening", "Ouvindo…"), ("thinking", "Processando…"),
-              ("speaking", "O tempo está firme: sem chuva até domingo. Quer que eu deixe a sala a 23 graus?")]
+              ("speaking", "Sem chuva até domingo. Ou seja: zero desculpa para faltar no treino.")]
 DEMO_HUD = {"clima": "24° · céu limpo", "agenda": "14:00 Reunião | 17:00 Dentista | 19:30 Treino",
             "monitores": "monitores ok"}
 
@@ -96,7 +102,7 @@ class Face:
         self.quiet = Notifier(self.config, None)
         self.demo = demo
         pygame.init()
-        pygame.display.set_caption("JARVIS")
+        pygame.display.set_caption("Guará")
         if tamanho:
             self.screen = pygame.display.set_mode(tamanho)
         else:
@@ -148,11 +154,31 @@ class Face:
         self.screen.blit(surf, (x, y + int((1 - e_out(k)) * r.height)))
         self.screen.set_clip(None)
 
-    def marca(self, cx: int, cy: int, r: int, t: float, fundo=TINTA, ponto=LARANJA):
+    def marca(self, cx: int, cy: int, r: int, t: float, fundo=PAPEL):
+        """O guará: orelhas enormes, focinho comprido, um olho só.
+
+        Em fundo claro é o bicho mesmo — laranja de focinho preto. Em fundo
+        escuro ou laranja vira silhueta, e o olho é o único ponto de cor.
+        De vez em quando ele pisca: a piscadela de quem acabou de ser irônico.
+        """
         pg = self.pg
-        pg.draw.circle(self.screen, fundo, (cx, cy), r)
-        pulso = math.exp(-6 * (t % 2.0))
-        pg.draw.circle(self.screen, ponto, (int(cx + r * .38), int(cy - r * .38)), max(2, int(r * (.2 + .06 * pulso))))
+        s = r * .85
+        def pts(forma):
+            return [(cx + x * s, cy + (y + .26) * s) for x, y in forma]
+        if fundo == PAPEL:
+            corpo, olho, focinho = LARANJA, TINTA, TINTA
+        elif fundo == LARANJA:
+            corpo, olho, focinho = TINTA, PAPEL, None
+        else:
+            corpo, olho, focinho = PAPEL, LARANJA, None
+        pg.draw.polygon(self.screen, corpo, pts(CABECA))
+        if focinho:
+            pg.draw.polygon(self.screen, focinho, pts(FOCINHO))
+        fase = t % PISCA_A_CADA
+        aberto = .15 if fase < .14 else 1.0
+        raio = max(2, int(.14 * s))
+        ex, ey = int(cx + .33 * s), int(cy + .16 * s)
+        pg.draw.ellipse(self.screen, olho, (ex - raio, ey - int(raio * aberto), 2 * raio, max(2, int(2 * raio * aberto))))
 
     def quebra(self, peso: str, tam: int, s: str, largura: int) -> list[str]:
         f, linhas, atual = self.fonte(peso, tam), [], ""
@@ -170,8 +196,8 @@ class Face:
         pg, w, h, m = self.pg, self.w, self.h, self.m
         agora = datetime.now(ZoneInfo(self.config.timezone))
         r = int(h * .036)
-        self.marca(m + r, m + r, r, t)
-        self.screen.blit(self.texto("black", int(h * .046), "JARVIS", TINTA), (m + 2 * r + 18, m + r - int(h * .03)))
+        self.marca(m + r, m + r, r, t, PAPEL)
+        self.screen.blit(self.texto("black", int(h * .046), "Guará", TINTA), (m + 2 * r + 12, m + r - int(h * .03)))
         data = self.texto("mono", int(h * .026), f"{DIAS_CURTOS[agora.weekday()]} · {agora.day} {MESES[agora.month - 1][:3].upper()}", TINTA)
         self.screen.blit(data, data.get_rect(topright=(w - m, m + r - data.get_height() // 2)))
 
@@ -218,7 +244,7 @@ class Face:
         for i in range(3):
             fase = (t * .9 + i / 3) % 1
             pg.draw.circle(self.screen, mistura(TINTA, LARANJA, fase), (cx, cy), int(r * (1 + fase * .9)), 5)
-        self.marca(cx, cy, r, t, TINTA, PAPEL)
+        self.marca(cx, cy, r, t, LARANJA)
         tam = int(h * .19)
         self.sobe(self.texto("black", tam, "Pode", TINTA), m, int(h * .26), k)
         self.sobe(self.texto("black", tam, "falar.", TINTA), m, int(h * .26) + int(tam * 1.02), prog(k, .15, 1))
@@ -227,7 +253,7 @@ class Face:
     def pensando(self, t: float, k: float):
         pg, h, m = self.pg, self.h, self.m
         r = int(h * .036)
-        self.marca(m + r, m + r, r, t, PAPEL, LARANJA)
+        self.marca(m + r, m + r, r, t, TINTA)
         tam = int(h * .17)
         self.sobe(self.texto("black", tam, "Um instante.", PAPEL), m, int(h * .34), k)
         lado = int(h * .05)
@@ -238,7 +264,7 @@ class Face:
     def falando(self, t: float, k: float, legenda: str, desde: float):
         pg, w, h, m = self.pg, self.w, self.h, self.m
         r = int(h * .036)
-        self.marca(m + r, m + r, r, t, PAPEL, LARANJA)
+        self.marca(m + r, m + r, r, t, TINTA)
         rot = self.texto("mono", int(h * .026), "FALANDO", CINZA)
         self.screen.blit(rot, rot.get_rect(topright=(w - m, m + r - rot.get_height() // 2)))
         frase = legenda.strip().strip("“”\"")

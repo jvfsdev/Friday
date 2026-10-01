@@ -1,4 +1,4 @@
-"""Barramento de estado do rosto: o processo do JARVIS escreve, o rosto lê.
+"""Barramento de estado do rosto: o processo do Guará escreve, o rosto lê.
 
 Arquivo JSON simples (state/face_state.json) — robusto, sem dependências,
 e cada processo pode reiniciar sem derrubar o outro. Só há escrita quando

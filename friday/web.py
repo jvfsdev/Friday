@@ -1,4 +1,4 @@
-"""Servidor web interno do JARVIS.
+"""Servidor web interno do Guará.
 
 Atende os webhooks da Twilio (ligações) e um endpoint genérico de entrada
 para sistemas de suporte. Não fica exposto direto: quem publica é o

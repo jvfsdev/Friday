@@ -1,7 +1,7 @@
 """Delegação de tarefas de código para o Mac.
 
 O servidor é velho demais para rodar agentes de código (os binários exigem
-instruções de CPU pós-2010), então o JARVIS conecta no Mac por SSH e entrega
+instruções de CPU pós-2010), então o Guará conecta no Mac por SSH e entrega
 a tarefa ao Claude Code de lá, via o executor scripts/mac_runner.py.
 
 Trilhos de segurança, sempre:
@@ -159,7 +159,7 @@ async def _acompanhar(mac: _Mac, mac_id: str) -> dict:
             if not rodando and agora - entrou > EXECUTOR_PARADO:
                 raise TrabalhoFalhou(
                     f"a tarefa está parada na fila do {mac.nome} sem nada rodando na frente — "
-                    "o executor do JARVIS está no ar? (`launchctl list | grep jarvis` no Mac)"
+                    "o executor do Guará está no ar? (`launchctl list | grep jarvis` no Mac)"
                 )
             if agora - entrou > ESPERA_NA_FILA:
                 raise TrabalhoFalhou(f"a tarefa ficou {ESPERA_NA_FILA // 3600}h na fila do {mac.nome}")

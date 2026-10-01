@@ -19,7 +19,7 @@ log = logging.getLogger("friday.brain")
 # Teto alto de propósito: com dezenas de ferramentas (MCP, Drive, casa,
 # finanças) uma tarefa legítima encadeia muita chamada. O teto existe só para
 # impedir laço infinito queimando cota — não para interromper trabalho de
-# verdade. Ao encostar nele, o JARVIS conclui com o que já tem em vez de
+# verdade. Ao encostar nele, o Guará conclui com o que já tem em vez de
 # devolver um erro (ver _concluir_sem_ferramentas).
 MAX_TOOL_ROUNDS = 60
 
@@ -56,7 +56,7 @@ class Brain:
 
     async def ask(self, user_text: str, media: list[tuple[bytes, str]] | None = None,
                   propagar_erro: bool = False) -> str:
-        """Pergunta ao JARVIS. `media`: pares (bytes, mime_type) — áudio, imagem etc.
+        """Pergunta ao Guará. `media`: pares (bytes, mime_type) — áudio, imagem etc.
 
         `propagar_erro=True` levanta a exceção em vez de devolver o texto do
         erro. Quem chama automaticamente (monitores) precisa saber que falhou,

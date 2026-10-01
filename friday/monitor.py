@@ -269,7 +269,7 @@ class FridayMonitor:
         self._cegueira_avisada: set[str] = set()  # monitores cuja cegueira já foi reportada
         self.dinamicos: dict[str, MonitorSpec] = {}
 
-    # ---- monitores que o próprio JARVIS cria ----
+    # ---- monitores que o próprio Guará cria ----
 
     @staticmethod
     def _arquivo_dinamicos():

@@ -191,7 +191,7 @@ docker run -d --name homeassistant --restart=unless-stopped \
    journalctl --user -u friday -f
    ```
 4. No `config.yaml`: `voice: {enabled: true}` e reinicie.
-5. Fale **"Hey Jarvis"** e, após o log de "listening", faça a pergunta.
+5. Fale **"Hey Jarvis"** (até o modelo "Ô, Guará" ser treinado) e, após o log de "listening", faça a pergunta.
    Sensibilidade: ajuste `wake_threshold` (menor = mais sensível).
 
 **Trocar a wake word por um nome próprio** (quando escolher o nome dela):
@@ -201,7 +201,7 @@ pelo Porcupine no `friday/voice.py`).
 
 ## 9b. Rosto na tela (pygame, sem navegador)
 
-O rosto do JARVIS renderizado nativamente (~50 MB de RAM — feito para o
+O rosto do Guará renderizado nativamente (~50 MB de RAM — feito para o
 notebook velho), na identidade editorial descrita em
 [docs/identidade-visual.md](docs/identidade-visual.md). Cada estado tem seu
 fundo chapado: repouso (papel: relógio grande, clima, agenda do dia),
@@ -239,7 +239,7 @@ agenda chegam do processo principal a cada 10 min (friday/face_dados.py).
   0 3 * * 0 /home/jarvis/Friday/scripts/backup_semanal.sh >> /var/log/jarvis-backup.log 2>&1
   ```
   Roda como root (único jeito de ler o config do Home Assistant) e envia ao
-  Drive como o usuário do JARVIS, mantendo 7 cópias locais e 3 no Drive.
+  Drive como o usuário do serviço (`jarvis`), mantendo 7 cópias locais e 3 no Drive.
   Exige autorizar o escopo `drive.file` numa conta (`scripts/google_auth.py`).
   Teste manual: `sudo ./scripts/backup_semanal.sh`.
   O pacote leva memória, tokens, `.env`, config, o banco de finanças **com a
@@ -261,7 +261,7 @@ agenda chegam do processo principal a cada 10 min (friday/face_dados.py).
 ## 11. Open Finance (gastos, cartões, orçamentos) — via ponte MCP
 
 Integra o [openfinance-analyst](https://github.com/meloluan/openfinance-analyst)
-(servidor MCP + Pluggy). O JARVIS passa a responder "onde foi meu dinheiro?",
+(servidor MCP + Pluggy). O Guará passa a responder "onde foi meu dinheiro?",
 achar assinaturas recorrentes, acompanhar fatura/parcelas e orçamentos.
 ⚠️ Lembre: as análises passam pelo Gemini (free tier = dados podem treinar).
 
@@ -278,7 +278,7 @@ Na Pluggy (uma vez):
    aplicação → copie `CLIENT_ID` e `CLIENT_SECRET`.
 2. Em [meu.pluggy.ai](https://meu.pluggy.ai) conecte seus bancos (conector
    "MeuPluggy" — dados do próprio CPF, grátis sem prazo) e anote os item ids.
-3. No `.env` do JARVIS:
+3. No `.env` do Guará:
    ```
    PLUGGY_CLIENT_ID=...
    PLUGGY_CLIENT_SECRET=...
@@ -286,7 +286,7 @@ Na Pluggy (uma vez):
    ```
 4. No `config.yaml`, descomente o bloco `mcp_servers:` (exemplo no
    config.example.yaml) e reinicie o serviço.
-5. Teste: "JARVIS, sincroniza meus dados bancários" e depois
+5. Teste: "Guará, sincroniza meus dados bancários" e depois
    "onde foi meu dinheiro esse mês?".
 
 **Patch para rodar em Linux**: o projeto guarda a chave do SQLCipher no
@@ -328,7 +328,7 @@ aparecer `Operation not permitted`, conceda **Acesso Total ao Disco** ao
 `/usr/bin/python3` em Ajustes → Privacidade e Segurança.
 
 No `config.yaml` do servidor, declare a lista fechada `code_projects:`
-(exemplo no config.example.yaml). Teste: "JARVIS, no projeto X, adicione ...".
+(exemplo no config.example.yaml). Teste: "Guará, no projeto X, adicione ...".
 
 Como ele trabalha: na branch que estiver aberta no Mac, sem commit — as
 alterações ficam soltas para você revisar no painel de mudanças do editor.
@@ -349,7 +349,7 @@ para você abrir aquela conversa no terminal e seguir dali.
    tailscale funnel status        # copie a URL https://...ts.net
    ```
 4. No `config.yaml`, bloco `web:` com `public_url` igual a essa URL.
-5. Reinicie. Teste: "JARVIS, me liga para confirmar uma coisa".
+5. Reinicie. Teste: "Guará, me liga para confirmar uma coisa".
 
 A conversa é livre: ele fala, você responde falando. Antes de executar
 qualquer ação ele repete o que entendeu e espera o seu sim — e toda a

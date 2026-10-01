@@ -19,7 +19,7 @@ log = logging.getLogger("friday.maintenance")
 
 
 async def _handler(ctx: ToolContext) -> str:
-    ok = await ctx.confirm("Atualizar o JARVIS (git pull + dependências) e reiniciar?")
+    ok = await ctx.confirm("Atualizar o Guará (git pull + dependências) e reiniciar?")
     if not ok:
         return "Atualização cancelada pelo chefe."
 

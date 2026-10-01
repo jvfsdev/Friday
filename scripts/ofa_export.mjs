@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Exporta contas e lançamentos do openfinance-analyst em JSON, para o fluxo
-// de caixa do JARVIS (friday/fluxo.py).
+// de caixa do Guará (friday/fluxo.py).
 //
 // Por que não pelas ferramentas MCP: nenhuma delas devolve os lançamentos
 // crus, e a ponte corta respostas em 12 mil caracteres. Por que não mudar o

@@ -137,8 +137,8 @@ routines:
 #     path: /Users/jvfs/Documents/repos/Friday
 
 # Servidores MCP plugáveis: qualquer servidor Model Context Protocol vira
-# ferramenta do JARVIS (requer: pip install -e ".[mcp]"). Segredos ficam no
-# .env — o servidor filho herda o ambiente do JARVIS automaticamente.
+# ferramenta do Guará (requer: pip install -e ".[mcp]"). Segredos ficam no
+# .env — o servidor filho herda o ambiente do Guará automaticamente.
 # mcp_servers:
 #   openfinance:               # github.com/meloluan/openfinance-analyst
 #     command: node

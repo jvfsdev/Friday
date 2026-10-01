@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Executor de tarefas de código no Mac, dentro da sessão do usuário.
 
-Por que existir: o JARVIS mora no servidor e conecta por SSH, mas sessões
+Por que existir: o Guará mora no servidor e conecta por SSH, mas sessões
 SSH no macOS não conseguem abrir o Keychain do login — e é lá que o Claude
 Code guarda as credenciais. Rodando como LaunchAgent (sessão gráfica), este
 executor tem acesso ao Keychain e também consegue abrir o editor na tela.
@@ -64,7 +64,7 @@ GIT_LEITURA = [
 # o agente entra na conversa que o chefe tiver aberto no Mac, e o texto da
 # tarefa fica no histórico dele — melhor que fique só o pedido.
 INSTRUCOES = """\
-Esta tarefa chega pelo JARVIS, o assistente pessoal do dono deste Mac, que a
+Esta tarefa chega pelo Guará, o assistente pessoal do dono deste Mac, que a
 repassou do Telegram. Ele não está olhando o terminal agora.
 - Pode ser uma pergunta ou análise: aí apenas responda, sem alterar arquivos.
 - Se alterar código e o projeto tiver testes automatizados, rode-os antes de
@@ -120,7 +120,7 @@ def _impressoes(raiz: Path, sujos: list) -> dict:
 
 
 def _deixei_eu(caminho: Path, sujos: list) -> bool:
-    """A sujeira na árvore é do trabalho anterior do JARVIS, ou do chefe?
+    """A sujeira na árvore é do trabalho anterior do Guará, ou do chefe?
 
     Sem commit, a árvore fica suja depois de cada tarefa — e recusar por isso
     mataria o "agora ajusta aquilo" logo em seguida. Então guardamos o
@@ -359,7 +359,7 @@ def main():
     for pasta in (PENDENTES, PRONTOS, RODANDO, CANCELAR):
         pasta.mkdir(parents=True, exist_ok=True)
     _faxina()
-    print(f"executor do JARVIS no ar, vigiando {PENDENTES}", flush=True)
+    print(f"executor do Guará no ar, vigiando {PENDENTES}", flush=True)
     while True:
         for arquivo in sorted(PENDENTES.glob("*.json"), key=lambda a: a.stat().st_mtime):
             try:

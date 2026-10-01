@@ -34,7 +34,7 @@ class ToolContext:
     send_voice: Callable[[str], Awaitable[None]] | None = None
     # Registro de trabalhos longos (tarefas de código, pipelines).
     jobs: Any = None
-    # Motor de monitores, para o JARVIS criar e remover os próprios vigias.
+    # Motor de monitores, para o Guará criar e remover os próprios vigias.
     monitor: Any = None
     # Envia um arquivo ao chefe: (nome, bytes, legenda) -> None
     send_file: Callable[..., Awaitable[None]] | None = None
