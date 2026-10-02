@@ -77,6 +77,10 @@ class VoiceLoop:
         # Palavra própria (treinada com scripts/palavra/): caminho do .onnx.
         # Sem ela, o modelo pronto "hey jarvis" do openWakeWord.
         self.wake_model = s.get("wake_model") or ""
+        # Quantos quadros de 80 ms seguidos acima do limiar para acordar. Ruído
+        # e música dão picos de um quadro; a palavra dura vários. O treino
+        # (scripts/palavra/treinar.py) diz qual valor usar junto com o limiar.
+        self.wake_seguidos = max(1, int(s.get("wake_seguidos", 1)))
 
     def _set(self, state: str, caption: str | None = None):
         log.info("estado de voz: %s", state)
@@ -105,7 +109,11 @@ class VoiceLoop:
         proprio = (ROOT / self.wake_model) if self.wake_model else None
         if proprio and proprio.exists():
             openwakeword.utils.download_models([])      # só os modelos de áudio de base
-            wake = WakeModel(wakeword_models=[str(proprio)], inference_framework="onnx")
+            # vad_threshold: o detector de voz humana do openWakeWord zera a nota
+            # quando não há fala — corta os disparos com música e ruído, que
+            # são a maior parte dos que um modelo treinado em casa ainda tem.
+            wake = WakeModel(wakeword_models=[str(proprio)], inference_framework="onnx",
+                             vad_threshold=float(self.config.voice_settings.get("wake_vad", 0.5)))
             chave, falada = proprio.stem, f"modelo próprio {proprio.name}"
         else:
             if proprio:
@@ -130,12 +138,14 @@ class VoiceLoop:
         from . import tts
 
         await tts.warmup()  # paga import e handshake antes da 1a conversa
-        log.info("ouvindo a sala (palavra de ativação: %s, limiar %.2f)", falada, self.wake_threshold)
+        log.info("ouvindo a sala (palavra de ativação: %s, limiar %.2f, %d quadro(s) seguidos)",
+                 falada, self.wake_threshold, self.wake_seguidos)
         piso_ruido = 0.0  # média móvel do RMS ambiente, medida em repouso
         from collections import deque
 
         anteriores: deque = deque(maxlen=int(2.5 * RATE / CHUNK))   # últimos 2,5 s
         ultimo_registro = 0.0
+        corrida = 0
         with stream:
             self._set("idle")
             while True:
@@ -151,8 +161,10 @@ class VoiceLoop:
                     asyncio.get_running_loop().run_in_executor(
                         None, _registrar, np.concatenate(list(anteriores)), nota,
                         nota >= self.wake_threshold)
-                if nota < self.wake_threshold:
+                corrida = corrida + 1 if nota >= self.wake_threshold else 0
+                if corrida < self.wake_seguidos:
                     continue
+                corrida = 0
 
                 wake.reset()
                 self._set("listening", "Ouvindo…")

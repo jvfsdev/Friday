@@ -34,6 +34,9 @@ QUADROS = 16
 FORA_DO_TREINO = {"Rocko", "Flo", "pt-PT-RaquelNeural", "en-US-BrianMultilingualNeural"}
 AUMENTOS_POR_POSITIVO = 6
 REFRATARIO = 25         # quadros (2 s): um disparo longo conta uma vez só
+# Quantos quadros seguidos acima do limiar para acordar. Ruído e música dão
+# picos de um quadro; a palavra de verdade dura vários. O voice.py usa o mesmo.
+SEGUIDOS = (1, 2, 3)
 
 rng = np.random.default_rng(7)
 
@@ -141,18 +144,18 @@ def construir():
     import torch.nn as nn
 
     return nn.Sequential(
-        nn.Flatten(), nn.Linear(QUADROS * 96, 128), nn.LayerNorm(128), nn.ReLU(), nn.Dropout(.2),
-        nn.Linear(128, 128), nn.LayerNorm(128), nn.ReLU(), nn.Dropout(.2),
-        nn.Linear(128, 1), nn.Sigmoid(),
+        nn.Flatten(), nn.Dropout(.1), nn.Linear(QUADROS * 96, 96), nn.LayerNorm(96), nn.ReLU(), nn.Dropout(.3),
+        nn.Linear(96, 96), nn.LayerNorm(96), nn.ReLU(), nn.Dropout(.3),
+        nn.Linear(96, 1), nn.Sigmoid(),
     )
 
 
-def treinar(X, y, peso, epocas=40):
+def treinar(X, y, peso, epocas=16):
     import torch
 
     disp = "mps" if torch.backends.mps.is_available() else "cpu"
     modelo = construir().to(disp)
-    opt = torch.optim.AdamW(modelo.parameters(), lr=1e-3, weight_decay=1e-3)
+    opt = torch.optim.AdamW(modelo.parameters(), lr=1e-3, weight_decay=2e-2)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epocas)
     Xt, yt, wt = (torch.tensor(a, device=disp) for a in (X, y.astype("float32"), peso.astype("float32")))
     n = len(Xt)
@@ -182,15 +185,29 @@ def pontuar(modelo, X: np.ndarray) -> np.ndarray:
                                for i in range(0, len(X), 4096)]) if len(X) else np.array([])
 
 
-def disparos(pontos: np.ndarray, limiar: float) -> int:
-    n, i = 0, 0
+def disparos(pontos: np.ndarray, limiar: float, seguidos: int = 1) -> int:
+    n, i, corrida = 0, 0, 0
     while i < len(pontos):
-        if pontos[i] >= limiar:
-            n += 1
+        corrida = corrida + 1 if pontos[i] >= limiar else 0
+        if corrida >= seguidos:
+            n, corrida = n + 1, 0
             i += REFRATARIO
         else:
             i += 1
     return n
+
+
+def acertou(notas_seq: np.ndarray, limiar: float, seguidos: int) -> float:
+    """Fração de clipes em que a nota fica acima do limiar por N quadros seguidos."""
+    ok = 0
+    for seq in notas_seq:
+        corrida = 0
+        for v in seq:
+            corrida = corrida + 1 if v >= limiar else 0
+            if corrida >= seguidos:
+                ok += 1
+                break
+    return ok / max(1, len(notas_seq))
 
 
 # -------------------------------------------------------------------- main
@@ -232,7 +249,7 @@ def main():
     # 3) as ~11 h do openWakeWord (fala, música, ruído); o fim fica para a prova
     oww = np.load(RAIZ / "treino-dados" / "negativos_oww.npy", mmap_mode="r")
     corte = int(len(oww) * .85)
-    Xn_oww = deslizantes(np.asarray(oww[:corte]), 6)
+    Xn_oww = deslizantes(np.asarray(oww[:corte]), 3)
 
     # 4) a calibração de verdade, se houver: o que a pessoa marcou no painel
     Xn_minhas = np.zeros((0, QUADROS, 96), "float32")
@@ -261,7 +278,7 @@ def main():
 
     # Rodadas em cima dos próprios erros: os negativos em que ele quase
     # acordou voltam com peso maior. É o que mais derruba disparo falso.
-    for rodada in (1, 2):
+    for rodada in (1,):
         notas = pontuar(modelo, X[len(Xp):])
         dificeis = np.flatnonzero(notas > .2) + len(Xp)
         print(f"rodada {rodada}: {len(dificeis)} negativos difíceis (nota > 0,2)", flush=True)
@@ -269,13 +286,19 @@ def main():
             break
         X = np.concatenate([X, np.repeat(X[dificeis], 3, axis=0)])
         y = np.concatenate([y, np.zeros(len(dificeis) * 3)])
-        peso = np.concatenate([peso, np.full(len(dificeis) * 3, 4.0)])
+        peso = np.concatenate([peso, np.full(len(dificeis) * 3, 2.0)])
         modelo = treinar(X, y, peso)
 
     # ----------------------------------------------------------- a prova
     print("avaliando em vozes e áudio que o modelo nunca viu…", flush=True)
-    limpos = ouvido.janelas(np.stack([int16(_fim(sem_silencio(carregar(p)))) for p in pos_te]))
-    sujos = ouvido.janelas(np.stack([int16(bagunca(sem_silencio(carregar(p)), None)) for p in pos_te for _ in range(3)]))
+    # cada positivo ganha 0,8 s depois da fala: é nesse trecho que o detector
+    # decide, e a regra dos "quadros seguidos" precisa da sequência de notas
+    def depois(x, sujo):
+        cauda = (ruido(int(.8 * SR), "rosa") * .01) if sujo else np.zeros(int(.8 * SR), "float32")
+        return int16(np.concatenate([x, cauda]))
+    seq = lambda clipes: np.stack([pontuar(modelo, deslizantes(e, 1)) for e in ouvido.f.embed_clips(np.stack(clipes), batch_size=64)])
+    n_limpos = seq([depois(_fim(sem_silencio(carregar(p))), False) for p in pos_te])
+    n_sujos = seq([depois(bagunca(sem_silencio(carregar(p)), None), True) for p in pos_te for _ in range(3)])
     fala_te = np.concatenate([np.concatenate([carregar(p), np.zeros(int(SR * .5), "float32")])
                               for p in neg_te if "__peg__" not in p.name])
     pontos_fala = pontuar(modelo, deslizantes(ouvido.fluxo(fala_te), 1))
@@ -283,38 +306,43 @@ def main():
     horas_fala = len(pontos_fala) * .08 / 3600
     horas_oww = len(pontos_oww) * .08 / 3600
 
-    p_limpos, p_sujos = pontuar(modelo, limpos), pontuar(modelo, sujos)
     resultados = []
-    for limiar in np.round(np.arange(.3, .96, .05), 2):
-        df, do = disparos(pontos_fala, limiar), disparos(pontos_oww, limiar)
-        resultados.append({"limiar": float(limiar), "acerto_limpo": round(float((p_limpos >= limiar).mean()), 3),
-                           "acerto_sala": round(float((p_sujos >= limiar).mean()), 3),
-                           "falsos_por_hora": round((df + do) / (horas_fala + horas_oww), 2),
-                           "falsos_portugues": df, "falsos_geral": do})
+    for seguidos in SEGUIDOS:
+        for limiar in np.round(np.arange(.3, .96, .05), 2):
+            df, do = disparos(pontos_fala, limiar, seguidos), disparos(pontos_oww, limiar, seguidos)
+            resultados.append({"seguidos": seguidos, "limiar": float(limiar),
+                               "acerto_limpo": round(acertou(n_limpos, limiar, seguidos), 3),
+                               "acerto_sala": round(acertou(n_sujos, limiar, seguidos), 3),
+                               "falsos_por_hora": round((df + do) / (horas_fala + horas_oww), 2),
+                               "falsos_portugues": df, "falsos_geral": do})
     bons = [r for r in resultados if r["falsos_por_hora"] <= a.max_fa_hora]
-    escolhido = max(bons, key=lambda r: r["acerto_sala"]) if bons else resultados[-1]
+    escolhido = (max(bons, key=lambda r: (r["acerto_sala"], -r["falsos_por_hora"])) if bons
+                 else min(resultados, key=lambda r: r["falsos_por_hora"] - r["acerto_sala"]))
 
-    # pegadinhas: a maior nota que cada uma tirou, nas vozes fora do treino
+    # pegadinhas: a maior nota sustentada (pelos quadros seguidos do escolhido)
     peg = {}
+    k = escolhido["seguidos"]
     for p in neg_te:
         if "__peg__" in p.name:
             frase = p.name.split("__peg__")[1].removesuffix(".wav")
-            s = float(pontuar(modelo, ouvido.janelas(int16(_fim(sem_silencio(carregar(p))))[None]))[0])
-            peg[frase] = max(peg.get(frase, 0), s)
+            notas = seq([depois(_fim(sem_silencio(carregar(p))), False)])[0]
+            sustentada = max(min(notas[i: i + k]) for i in range(len(notas) - k + 1))
+            peg[frase] = max(peg.get(frase, 0), float(sustentada))
 
     _exportar(modelo, pasta / f"{a.nome}.onnx")
-    relatorio = {"limiar": escolhido["limiar"], "escolhido": escolhido, "curva": resultados,
-                 "pegadinhas_pior_nota": dict(sorted(peg.items(), key=lambda kv: -kv[1])),
+    relatorio = {"limiar": escolhido["limiar"], "seguidos": escolhido["seguidos"], "escolhido": escolhido,
+                 "curva": resultados, "pegadinhas_pior_nota": dict(sorted(peg.items(), key=lambda kv: -kv[1])),
                  "horas_de_prova": round(horas_fala + horas_oww, 2), "minutos": round((time.time() - t0) / 60, 1)}
     (pasta / "relatorio.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2))
     print(f"prova: {horas_fala * 60:.0f} min de fala em português + {horas_oww:.1f} h de áudio geral")
     for r in resultados:
-        print(f"  limiar {r['limiar']:.2f}: acerto {r['acerto_limpo']:.0%} limpo / {r['acerto_sala']:.0%} sala · "
-              f"{r['falsos_por_hora']}/h ({r['falsos_portugues']} em pt, {r['falsos_geral']} no geral)")
-    print(f"escolhido: {escolhido['limiar']} · {relatorio['minutos']} min")
-    print("pegadinhas (pior nota, limiar", escolhido["limiar"], "):")
-    for f, s in list(relatorio["pegadinhas_pior_nota"].items())[:12]:
-        print(f"  {'⚠' if s >= escolhido['limiar'] else ' '} {s:.2f}  {f}")
+        if r["limiar"] in (.5, .6, .7, .8, .85, .9, .95):
+            print(f"  {r['seguidos']} quadro(s), limiar {r['limiar']:.2f}: acerto {r['acerto_limpo']:.0%} limpo / "
+                  f"{r['acerto_sala']:.0%} sala · {r['falsos_por_hora']}/h ({r['falsos_portugues']} pt, {r['falsos_geral']} geral)")
+    print(f"escolhido: limiar {escolhido['limiar']}, {escolhido['seguidos']} quadro(s) seguidos · {relatorio['minutos']} min")
+    print("pegadinhas (pior nota sustentada):")
+    for f, sc in list(relatorio["pegadinhas_pior_nota"].items())[:12]:
+        print(f"  {'⚠' if sc >= escolhido['limiar'] else ' '} {sc:.2f}  {f}")
 
 
 def _leve(x: np.ndarray) -> np.ndarray:
