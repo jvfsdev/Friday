@@ -99,3 +99,7 @@ Feito com [Gemini](https://ai.google.dev),
 [openWakeWord](https://github.com/dscripka/openWakeWord),
 [Home Assistant](https://www.home-assistant.io) e o
 [openfinance-analyst](https://github.com/meloluan/openfinance-analyst).
+
+## Licença
+
+[MIT](LICENSE) — use, modifique e distribua à vontade.

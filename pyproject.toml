@@ -3,6 +3,7 @@ name = "friday"
 version = "0.1.0"
 description = "Guará — assistente pessoal auto-hospedado, sarcástico e caloroso"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
     "google-genai>=1.0",
     "python-telegram-bot>=21.0",
