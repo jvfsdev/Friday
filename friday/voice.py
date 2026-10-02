@@ -35,6 +35,17 @@ BEEP_FILE = ROOT / "state" / "wake_beep.wav"
 # a palavra com a voz, o microfone e a sala de verdade (scripts/palavra/).
 CALIBRACAO = ROOT / "state" / "calibracao"
 NOTA_MINIMA = 0.25
+PALAVRA_PADRAO = "modelos/guara.onnx"
+
+
+def _relatorio(modelo) -> dict:
+    """Os valores que o treino escolheu para este modelo, se houver."""
+    import json
+
+    try:
+        return json.loads(modelo.with_suffix(".relatorio.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 GUARDAR_NO_MAXIMO = 300
 
 
@@ -70,17 +81,21 @@ class VoiceLoop:
         # Por padrão publica no rosto (state/face_state.json).
         self.on_state = on_state or face_state.publish
         s = config.voice_settings
-        self.wake_threshold = float(s.get("wake_threshold", 0.5))
+        # Palavra de ativação: por padrão o "Ô, Guará" que vem no repositório.
+        # Limiar e quadros seguidos vêm do relatório do treino que acompanha o
+        # modelo (<modelo>.relatorio.json); o config só sobrescreve se quiser.
+        self.wake_model = s.get("wake_model") or PALAVRA_PADRAO
+        relatorio = _relatorio(ROOT / self.wake_model)
+        self.wake_threshold = float(s.get("wake_threshold") or relatorio.get("limiar", 0.5))
         self.silence_seconds = float(s.get("silence_seconds", 0.9))
         self.max_utterance = float(s.get("max_utterance_seconds", 15))
         self.input_device = s.get("input_device")  # None = padrão do sistema
         # Palavra própria (treinada com scripts/palavra/): caminho do .onnx.
         # Sem ela, o modelo pronto "hey jarvis" do openWakeWord.
-        self.wake_model = s.get("wake_model") or ""
         # Quantos quadros de 80 ms seguidos acima do limiar para acordar. Ruído
         # e música dão picos de um quadro; a palavra dura vários. O treino
         # (scripts/palavra/treinar.py) diz qual valor usar junto com o limiar.
-        self.wake_seguidos = max(1, int(s.get("wake_seguidos", 1)))
+        self.wake_seguidos = max(1, int(s.get("wake_seguidos") or relatorio.get("seguidos", 1)))
 
     def _set(self, state: str, caption: str | None = None):
         log.info("estado de voz: %s", state)

@@ -1,5 +1,5 @@
 {
-  "limiar": 0.95,
+  "limiar": 0.85,
   "seguidos": 3,
   "escolhido": {
     "seguidos": 3,
@@ -488,5 +488,7 @@
     "ele-falou-aguardar-mesmo": 8.505149889970198e-05
   },
   "horas_de_prova": 1.85,
-  "minutos": 9.0
+  "minutos": 9.0,
+  "limiar_do_treino": 0.95,
+  "por_que": "0.95 e 0.85 empatam em falsos/h com 3 quadros seguidos (2,7/h); 0.85 acerta mais em sala ruidosa (75% x 73%)."
 }

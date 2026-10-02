@@ -20,9 +20,11 @@ quiet_hours:
 # Voz na sala (ligar SÓ no servidor/notebook — precisa de mic e alto-falante)
 voice:
   enabled: true
-  wake_threshold: 0.5          # sensibilidade da wake word (0-1)
-  # wake_model: modelos/guara.onnx   # palavra própria (scripts/palavra/); sem isto, "hey jarvis"
-  # wake_seguidos: 3            # quadros de 80 ms seguidos acima do limiar (o treino sugere)
+  # Palavra de ativação: "Ô, Guará" (modelos/guara.onnx), com o limiar e os
+  # quadros seguidos que o treino escolheu. Só preencha para mudar:
+  # wake_model: modelos/outro.onnx   # treine o seu com scripts/palavra/
+  # wake_threshold: 0.85             # mais alto = acorda menos (o painel sugere)
+  # wake_seguidos: 3
   silence_seconds: 0.9         # silêncio que encerra a fala
   # Motor de voz: auto (nuvem, cai para espeak sem internet) | edge | espeak | piper
   # No servidor antigo: edge ~1,4s por frase, espeak ~0,2s, piper ~13s (inviável)
