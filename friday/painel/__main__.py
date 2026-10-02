@@ -156,7 +156,7 @@ async def inicio(request):
     linhas += [linha(f"/c/{i.id}", i.nome, i.resumo, integracoes.configurada(i, env))
                for i in integracoes.INTEGRACOES if not i.essencial]
     linhas.append(linha("/voz", "Palavra de ativação", "Ajuste para a sua voz e a sua sala.", True))
-    linhas.append(linha("/preferencias", "Preferências", "Fuso horário e horário de silêncio.", True))
+    linhas.append(linha("/preferencias", "Preferências", "Seu nome, fuso e horário de silêncio.", True))
 
     if no_ar:
         titulo, sub = "Tudo no ar.", "Ele está rodando. Aqui você liga e desliga o resto."
@@ -437,8 +437,14 @@ async def preferencias(request):
         if fuso not in FUSOS or not (valido(ini) and valido(fim)) or bool(ini) != bool(fim):
             aviso, ruim = "Confira: horários no formato 23:00, os dois preenchidos ou os dois vazios.", True
         else:
+            nome = (f.get("dono") or "").strip()[:60]
+
             def mudar(d):
                 d["timezone"] = fuso
+                if nome:
+                    d["dono"] = nome
+                else:
+                    d.pop("dono", None)
                 if ini:
                     d["quiet_hours"] = {"inicio": ini, "fim": fim}
                 else:
@@ -450,7 +456,9 @@ async def preferencias(request):
     q = cfg.get("quiet_hours") or {}
     atual = cfg.get("timezone", "America/Sao_Paulo")
     opcoes = "".join(f'<option {"selected" if f == atual else ""}>{f}</option>' for f in FUSOS)
-    corpo = f"""<h1>Preferências</h1><form method="post"><label for="f-fuso">Fuso horário</label><select id="f-fuso" name="fuso" style="font:600 17px Txt,system-ui;padding:12px;border:3px solid #141414;border-radius:6px;width:100%">{opcoes}</select>
+    corpo = f"""<h1>Preferências</h1><form method="post"><label for="f-dono">Seu nome</label>
+<input id="f-dono" type="text" name="dono" value="{e(cfg.get('dono', ''))}" placeholder="Como ele deve te chamar">
+<label for="f-fuso">Fuso horário</label><select id="f-fuso" name="fuso" style="font:600 17px Txt,system-ui;padding:12px;border:3px solid #141414;border-radius:6px;width:100%">{opcoes}</select>
 <h2>Horário de silêncio</h2><p class="ajuda">Nesse intervalo ele não manda mensagem comum — guarda para depois. Alertas críticos furam.</p>
 <label for="f-inicio">Começa</label><input id="f-inicio" type="text" name="inicio" value="{e(q.get('inicio', ''))}" placeholder="23:00">
 <label for="f-fim">Termina</label><input id="f-fim" type="text" name="fim" value="{e(q.get('fim', ''))}" placeholder="07:00">

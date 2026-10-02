@@ -1,4 +1,4 @@
-"""Autoriza a Friday numa conta Microsoft (@hotmail/@outlook/@live) — rodar UMA vez por conta.
+"""Autoriza o Guará numa conta Microsoft (@hotmail/@outlook/@live) — rodar UMA vez por conta.
 
 Preparação (uma vez só, vale para todas as contas):
 1. Em https://portal.azure.com → "Registros de aplicativo" → "Novo registro".

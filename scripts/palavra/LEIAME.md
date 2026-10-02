@@ -1,12 +1,12 @@
 # Treinar a sua própria palavra de ativação
 
-O Guará vem ouvindo "hey Jarvis" porque é o único modelo pronto do
-openWakeWord. Com estes scripts você treina o **seu** nome — "Ô, Guará",
-"Ei, Lupa", o que quiser — sem gravar centenas de vezes a própria voz.
+O Guará já vem treinado para **"Ô, Guará"** (`modelos/guara.onnx`). Com
+estes scripts você treina o **seu** nome — "Ei, Lupa", "Ô, Tonico", o que
+quiser — sem gravar centenas de vezes a própria voz.
 
 Precisa de um **Mac** (o treino usa as vozes do macOS e o chip para
 acelerar) e de uns **40 minutos**, quase todos esperando. O resultado é um
-arquivo de ~200 KB que roda até em notebook velho.
+arquivo de ~600 KB que roda até em notebook velho.
 
 ## 1. Preparar (uma vez)
 

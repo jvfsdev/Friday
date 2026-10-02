@@ -47,6 +47,7 @@ class Brain:
         return (
             f"{persona}\n\n"
             f"# Contexto atual\n"
+            f"- Seu dono: {self.config.dono or 'o nome ainda não foi configurado; chame de chefe'}\n"
             f"- Agora: {now} ({self.config.timezone})\n"
             f"- Máquinas remotas disponíveis: {machines}\n"
             f"- Contas Google conectadas: {google}\n"

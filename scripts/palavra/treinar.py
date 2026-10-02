@@ -2,7 +2,7 @@
 
 Treina uma rede pequena em cima dos modelos de áudio do openWakeWord (que
 já "sabem ouvir"): ela só aprende a reconhecer a SUA frase. O resultado é
-um .onnx de ~200 KB que roda até no notebook velho.
+um .onnx de ~600 KB que roda até no notebook velho.
 
 Honestidade na medida: algumas vozes ficam de fora do treino inteiro, e é
 nelas que a taxa de acerto é medida — senão o número mede decoreba. Os

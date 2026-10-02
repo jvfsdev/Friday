@@ -52,6 +52,7 @@ class Config:
     model: str = "gemini-2.5-flash"
     fallback_model: str = "gemini-2.5-flash-lite"
     timezone: str = "America/Sao_Paulo"
+    dono: str = ""                     # o nome de quem ele atende (painel → Preferências)
     history_max_turns: int = 40
     quiet_start: str = ""              # ex.: "23:00" — vazio desativa
     quiet_end: str = ""                # ex.: "07:00"
@@ -139,6 +140,7 @@ def load_config() -> Config:
         model=raw.get("model", "gemini-2.5-flash"),
         fallback_model=raw.get("fallback_model", "gemini-2.5-flash-lite"),
         timezone=raw.get("timezone", "America/Sao_Paulo"),
+        dono=str(raw.get("dono", "") or "").strip(),
         history_max_turns=int(raw.get("history_max_turns", 40)),
         machines=machines,
         routines=routines,

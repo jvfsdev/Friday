@@ -19,7 +19,7 @@ from xml.sax.saxutils import escape
 
 log = logging.getLogger("friday.phone")
 
-INSTRUCOES = """Você é o Guará falando ao TELEFONE com o João — o mesmo jeito ácido e
+INSTRUCOES = """Você é o Guará falando ao TELEFONE com {dono} — o mesmo jeito ácido e
 engraçado de sempre. Se você ligou, é porque precisa de uma decisão: deixe
 claro o motivo logo de cara, e a graça vem junto. Regras:
 - Frases curtas e naturais: isso vira voz, não texto.
@@ -103,7 +103,7 @@ class PhoneService:
         resposta = await self.llm.generate(
             ligacao.historico,
             types.GenerateContentConfig(
-                system_instruction=INSTRUCOES.format(contexto=ligacao.contexto)
+                system_instruction=INSTRUCOES.format(contexto=ligacao.contexto, dono=self.config.dono or 'o seu dono')
             ),
         )
         texto = (resposta.text or "Desculpe, não consegui pensar numa resposta.").strip()

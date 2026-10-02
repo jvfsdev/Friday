@@ -1,6 +1,8 @@
-# Guia de deploy da Friday no servidor 🚀
+# Guia detalhado de instalação do Guará
 
-Checklist completo, na ordem. Os passos 1–4 colocam a Friday no ar; os demais
+**O jeito fácil é o do [README](README.md#instalação):** `./scripts/instalar.sh`
+e o resto pelo painel. Este guia é para quem prefere o terminal, ou quer
+entender o que cada peça faz. Os passos 1–4 colocam o Guará no ar; os demais
 ligam cada capacidade e podem ser feitos aos poucos, em qualquer ordem.
 
 ## 1. Preparar o notebook (Linux)
@@ -14,39 +16,38 @@ Dica: nas opções de energia, configure para **não suspender com a tampa fecha
 (`/etc/systemd/logind.conf` → `HandleLidSwitch=ignore`, depois
 `sudo systemctl restart systemd-logind`).
 
-## 2. Instalar a Friday
-
-Leve o repositório para o servidor (git clone de um remoto, ou copie a pasta
-via pendrive/scp — o `.env` NÃO vai no git, copie-o manualmente):
+## 2. Instalar o Guará
 
 ```bash
-cd ~ && git clone <seu-remoto> Friday   # ou: scp -r do Mac
-cd Friday
-python3 -m venv .venv
-.venv/bin/pip install -e .
-cp /caminho/do/.env .env                # o mesmo .env que você preencheu no Mac
+git clone https://github.com/jvfsdev/Guara.git ~/Guara
+cd ~/Guara && ./scripts/instalar.sh
 ```
 
-Se você já autorizou o Google no Mac (passo 6), copie a pasta `state/` também.
+O instalador cria o ambiente Python, prepara o `.env` (permissão 600) e o
+`config.yaml` a partir dos exemplos, e instala dois serviços systemd com o
+**seu** usuário e a **sua** pasta: `friday` (o Guará) e `guara-painel` (o
+painel). Pode rodar de novo quando quiser — o que já existe é mantido.
 
-Teste rápido antes de virar serviço:
+Prefere sem o instalador? É o mesmo que:
 
 ```bash
-.venv/bin/python -m friday --cli
+python3 -m venv .venv && .venv/bin/pip install -e .
+cp .env.example .env && chmod 600 .env && cp config.example.yaml config.yaml
+.venv/bin/python -m friday --cli     # conversa no terminal, para testar
 ```
 
-## 3. Rodar 24/7 (systemd)
+…e copiar `deploy/friday.service` e `deploy/guara-painel.service` para
+`/etc/systemd/system/`, trocando usuário e caminho pelos seus.
 
-Edite `deploy/friday.service` se seu usuário/caminho não for `jvfs`/`/home/jvfs/Friday`, então:
+## 3. Rodar 24/7
 
-```bash
-sudo cp deploy/friday.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now friday
-```
+Os serviços sobem sozinhos quando o computador liga e se reerguem se caírem.
+Enquanto faltar a chave do Gemini ou o Telegram, o Guará tenta de novo a cada
+10 s — é só completar no painel.
 
-⚠️ **Antes de iniciar no servidor, pare a Friday no Mac** (duas instâncias do
-mesmo bot brigam pelas mensagens — erro "Conflict" no log).
+⚠️ **Uma instância por bot.** Se você testou no notebook e depois instalou no
+servidor, pare a outra: duas cópias do mesmo bot brigam pelas mensagens
+(erro "Conflict" no log).
 
 Verificar: `systemctl status friday` e `journalctl -u friday -f`.
 Teste do celular: mande uma mensagem no Telegram.
@@ -84,9 +85,8 @@ Rotinas novas: edite o bloco `routines:` do `config.yaml` e reinicie.
 Monitores de eventos (disco, serviços, máquinas on/offline): bloco `monitors:`
 do `config.yaml` — exemplos comentados lá.
 
-**Autoatualização**: com um remoto git configurado (ex.: repositório no
-GitHub), basta dizer "Friday, atualiza você mesma" — ela faz git pull,
-reinstala dependências e se reinicia (o systemd a ressuscita sozinho).
+**Autoatualização**: basta dizer "Guará, se atualiza" — ele faz git pull,
+reinstala dependências e se reinicia (o systemd o ressuscita sozinho).
 
 ## 5. Controlar o Mac e o PC (SSH + Wake-on-LAN)
 
@@ -106,7 +106,7 @@ na BIOS e nas propriedades do adaptador de rede no Windows. Descubra o MAC
 com `ipconfig /all` (Endereço Físico).
 
 Por fim, descomente e preencha o bloco `machines:` no `config.yaml`
-(IPs fixos ajudam: reserve-os no roteador) e reinicie a Friday.
+(IPs fixos ajudam: reserve-os no roteador) e reinicie o Guará.
 
 ## 6. Email e Agenda (Google)
 
@@ -122,12 +122,12 @@ Pode ser feito **no Mac antes do deploy** (precisa de navegador):
 4. Rode `.venv/bin/python scripts/google_auth.py` e faça login no navegador.
 5. **Mais de uma conta Google?** Rode de novo com um nome:
    `scripts/google_auth.py trabalho` (e adicione esse email como usuário de
-   teste no passo 2; logue com a conta certa no navegador). A Friday consulta
+   teste no passo 2; logue com a conta certa no navegador). O Guará consulta
    todas quando você não especificar ("tenho email novo?") e pergunta qual
    usar quando precisar de uma só ("marca reunião...").
 6. No deploy, copie a pasta `state/` para o servidor junto com o `.env`.
 
-Nota: se você já tinha autorizado antes de a Friday ganhar o envio de emails,
+Nota: se você já tinha autorizado antes de o Guará ganhar o envio de emails,
 rode o script de novo para conceder a permissão nova (vale para cada conta).
 
 Nota de privacidade: com app em modo "teste" o token expira a cada 7 dias
@@ -141,7 +141,7 @@ A Microsoft aposentou o acesso por senha em 2024, então usa-se a API oficial
 (Graph) com um app registrado — burocracia única de ~5 minutos:
 
 1. Em [portal.azure.com](https://portal.azure.com) → **Registros de aplicativo**
-   → Novo registro. Nome: Friday; tipos de conta: **"Contas em qualquer
+   → Novo registro. Nome: Guará; tipos de conta: **"Contas em qualquer
    diretório organizacional e contas pessoais da Microsoft"**; redirecionamento
    em branco.
 2. No app criado: **Autenticação** → habilite **"Permitir fluxos de cliente
@@ -151,9 +151,9 @@ A Microsoft aposentou o acesso por senha em 2024, então usa-se a API oficial
    o script mostra um código; entre em microsoft.com/devicelogin (de qualquer
    aparelho, até o celular), digite o código e faça login. Funciona direto no
    servidor, sem navegador local.
-5. Reinicie a Friday. ("tenho email novo?" passa a olhar Gmail E Hotmail.)
+5. Reinicie o Guará. ("tenho email novo?" passa a olhar Gmail E Hotmail.)
 
-Nota: se você autorizou antes de a Friday ganhar o envio de emails, rode o
+Nota: se você autorizou antes de o Guará ganhar o envio de emails, rode o
 script de novo (por conta) para conceder a permissão Mail.Send.
 
 **Erro "does not exist in tenant 'Microsoft Services'" ao entrar no portal?**
@@ -172,9 +172,9 @@ Microsoft. Nessa ordem:
 
 1. Em [notion.so/my-integrations](https://www.notion.so/my-integrations):
    nova integração interna → copie o token para `NOTION_TOKEN` no `.env`.
-2. Em cada página/base que a Friday deve acessar: menu **•••** → Conexões →
+2. Em cada página/base que o Guará deve acessar: menu **•••** → Conexões →
    adicione a integração (as sub-páginas herdam o acesso).
-3. Reinicie a Friday.
+3. Reinicie o Guará.
 
 ## 8. Casa inteligente (Home Assistant)
 
@@ -189,11 +189,11 @@ docker run -d --name homeassistant --restart=unless-stopped \
 1. Abra `http://ip-do-servidor:8123` e crie a conta local.
 2. Adicione seus dispositivos: Configurações → Dispositivos e serviços
    (lâmpadas/tomadas Tuya/SmartLife entram pela integração Tuya).
-3. Para os Echo falarem pela Friday: instale o [HACS](https://hacs.xyz) e,
+3. Para os Echo falarem pelo Guará: instale o [HACS](https://hacs.xyz) e,
    por ele, a integração **Alexa Media Player** (login com a conta Amazon).
 4. Crie um token: seu Perfil no HA → Segurança → **Tokens de acesso de longa
    duração** → cole em `HA_TOKEN` no `.env` (confira `HA_URL`).
-5. Reinicie a Friday e teste: "Friday, quais dispositivos você vê na casa?"
+5. Reinicie o Guará e teste: "Guará, quais dispositivos você vê na casa?"
 
 ## 9. Voz na sala (mic e alto-falantes do notebook)
 
@@ -202,24 +202,19 @@ docker run -d --name homeassistant --restart=unless-stopped \
    `.venv/bin/pip install -e ".[voice]"`.
 2. Teste o hardware: `arecord -l` (mic aparece?), `speaker-test -t wav -c 2`
    (som sai?). Ajuste volume com `alsamixer`.
-3. **Importante**: serviço de sistema não acessa o áudio da sessão. Migre para
-   serviço de usuário:
-   ```bash
-   sudo systemctl disable --now friday
-   mkdir -p ~/.config/systemd/user && cp deploy/friday.service ~/.config/systemd/user/
-   # edite o arquivo: remova a linha User=
-   loginctl enable-linger $USER
-   systemctl --user daemon-reload && systemctl --user enable --now friday
-   journalctl --user -u friday -f
-   ```
+3. O usuário do serviço precisa estar no grupo `audio`
+   (`sudo usermod -aG audio $USER` e reinicie). Num servidor sem interface
+   gráfica o áudio vai direto pelo ALSA, e o serviço normal já funciona.
 4. No `config.yaml`: `voice: {enabled: true}` e reinicie.
-5. Fale **"Hey Jarvis"** (até o modelo "Ô, Guará" ser treinado) e, após o log de "listening", faça a pergunta.
-   Sensibilidade: ajuste `wake_threshold` (menor = mais sensível).
+5. Diga **"Ô, Guará"** (ou "Ei, Guará") e, depois do bipe, a pergunta.
 
-**Trocar a wake word por um nome próprio** (quando escolher o nome dela):
-crie conta gratuita em console.picovoice.ai → Porcupine → treine a palavra
-em português → baixe o `.ppn`. Me chame para plugar (troca do openWakeWord
-pelo Porcupine no `friday/voice.py`).
+**Ajuste fino** (no `config.yaml`, bloco `voice:`):
+- `ganho_mic: 30` — microfone de notebook costuma captar muito baixo. Se ele
+  não acorda nunca, aumente; se acorda à toa, diminua.
+- `wake_threshold` — o painel (**Palavra de ativação**) sugere o valor certo
+  depois que você marca alguns trechos como "era eu" / "não era".
+
+**Outro nome?** Treine o seu: [scripts/palavra/LEIAME.md](scripts/palavra/LEIAME.md).
 
 ## 9b. Rosto na tela (pygame, sem navegador)
 
@@ -258,7 +253,7 @@ agenda chegam do processo principal a cada 10 min (friday/face_dados.py).
   ```bash
   sudo crontab -e
   # domingo às 3h:
-  0 3 * * 0 /home/jarvis/Friday/scripts/backup_semanal.sh >> /var/log/jarvis-backup.log 2>&1
+  0 3 * * 0 /home/SEU_USUARIO/Guara/scripts/backup_semanal.sh >> /var/log/guara-backup.log 2>&1
   ```
   Roda como root (único jeito de ler o config do Home Assistant) e envia ao
   Drive como o usuário do serviço (`jarvis`), mantendo 7 cópias locais e 3 no Drive.
@@ -273,8 +268,8 @@ agenda chegam do processo principal a cada 10 min (friday/face_dados.py).
   (~300 MB; avalie se o notebook aguenta — as ferramentas `browse`/
   `browse_screenshot` aparecem sozinhas quando instalado).
 - **Listas no Notion**: crie a página da lista, compartilhe com a integração
-  e diga a ela: "Friday, anota na memória: a lista do mercado é a página X
-  do Notion" (ela acha o id com notion_search). Depois é só "anota leite".
+  e diga a ele: "Guará, anota na memória: a lista do mercado é a página X
+  do Notion" (ele acha o id com notion_search). Depois é só "anota leite".
 - **Presença (requer HA)**: instale o app **Home Assistant Companion** no
   celular e conecte ao seu HA — surge a entidade `person.*`/device_tracker.
   Exemplos prontos de monitor `ha_state` e rotina com `only_if` estão
@@ -292,7 +287,7 @@ No servidor:
 sudo apt install -y nodejs npm build-essential
 git clone https://github.com/meloluan/openfinance-analyst.git ~/openfinance-analyst
 cd ~/openfinance-analyst && npm install && npm run build
-cd ~/Friday && .venv/bin/pip install -e ".[mcp]"
+cd ~/Guara && .venv/bin/pip install -e ".[mcp]"
 ```
 
 Na Pluggy (uma vez):
@@ -391,9 +386,9 @@ trabalha no Mac, abre o editor com as alterações prontas para você revisar
 (sem commit) e ainda deixa um rascunho de resposta ao cliente (que só sai com
 a sua confirmação).
 
-## Resumo do que a Friday ganha em cada passo
+## Resumo do que o Guará ganha em cada passo
 
-| Passo | Ela passa a conseguir |
+| Passo | Ele passa a conseguir |
 |---|---|
 | 3 | Viver 24/7, rotinas e lembretes a qualquer hora |
 | 5 | "abre X no Mac", "roda Y no PC", "liga meu PC" |

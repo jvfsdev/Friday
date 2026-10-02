@@ -1,6 +1,6 @@
-# Configuração da Friday
+# Configuração do Guará
 
-# Escada de modelos: a Friday tenta na ordem; quando a cota diária de um
+# Escada de modelos: o Guará tenta na ordem; quando a cota diária de um
 # esgota (em todas as chaves de API), desce para o próximo.
 models:
   - gemini-3.5-flash
@@ -15,7 +15,7 @@ quiet_hours:
   fim: "07:00"
 
 # Backups (descomente e ajuste o destino; rotina diária mais abaixo)
-# backup_dir: /home/jvfs/backups-friday
+# backup_dir: /home/SEU_USUARIO/backups-guara
 
 # Voz na sala (ligar SÓ no servidor/notebook — precisa de mic e alto-falante)
 voice:
@@ -35,18 +35,18 @@ voice:
   # piper_voice: pt_BR-faber-medium
   # input_device: null         # dispositivo de captura (padrão do sistema)
 
-# Máquinas que a Friday pode controlar por SSH.
-# Requer chave SSH do servidor autorizada em cada máquina (guia no README).
-machines:
-  mac:
-    host: 100.70.155.0
-    user: jvfs
+# Máquinas que o Guará pode controlar por SSH.
+# Requer chave SSH do servidor autorizada em cada máquina (guia no DEPLOY.md).
+# machines:
+  # mac:
+  #   host: 192.168.0.10            # ou o IP do Tailscale, que vale fora de casa
+  #   user: SEU_USUARIO
   # pc:
   #   host: 192.168.0.11
-  #   user: jvfs
+  #   user: SEU_USUARIO
   #   mac_address: "AA:BB:CC:DD:EE:FF"   # para Wake-on-LAN ("liga meu PC")
 
-# Monitores de eventos: checagens baratas (sem IA) em intervalos; a Friday só
+# Monitores de eventos: checagens baratas (sem IA) em intervalos; o Guará só
 # te avisa quando o estado MUDA (ok → problema e problema → ok).
 monitors:
   disco-cheio:
@@ -122,7 +122,7 @@ routines:
   #   cron: "30 4 * * *"
   #   prompt: >
   #     Rode o backup: execute `bash scripts/backup.sh <backup_dir>` na pasta
-  #     da Friday e me avise apenas se algo der errado.
+  #     do Guará e me avise apenas se algo der errado.
   # resumo-do-dia:             # o que foi codado hoje (Fase G)
   #   cron: "0 20 * * 1-5"
   #   prompt: >
@@ -135,11 +135,12 @@ routines:
   #   prompt: Como está o trânsito daqui para o trabalho agora?
 
 # Projetos que o agente de código pode tocar (LISTA FECHADA — ele recusa
-# qualquer projeto fora daqui). Sempre trabalha em branch novo, nunca dá push.
+# qualquer projeto fora daqui). Trabalha na branch aberta e deixa as
+# alterações sem commit, para você revisar; nunca dá push.
 # code_projects:
-#   friday:
+#   meu-app:
 #     machine: mac
-#     path: /Users/jvfs/Documents/repos/Friday
+#     path: /Users/SEU_USUARIO/projetos/meu-app
 
 # Servidores MCP plugáveis: qualquer servidor Model Context Protocol vira
 # ferramenta do Guará (requer: pip install -e ".[mcp]"). Segredos ficam no
@@ -147,11 +148,11 @@ routines:
 # mcp_servers:
 #   openfinance:               # github.com/meloluan/openfinance-analyst
 #     command: node
-#     args: [/home/jarvis/openfinance-analyst/dist/index.js]
+#     args: [/home/SEU_USUARIO/openfinance-analyst/dist/index.js]
 
 # Servidor web interno (webhooks de ligação e do sistema de suporte).
 # Publique com: tailscale funnel --bg 8765   (não abra porta no roteador!)
 # web:
 #   port: 8765
-#   public_url: https://jarvis.SEU-TAILNET.ts.net
+#   public_url: https://guara.SEU-TAILNET.ts.net
 #   voice: Polly.Vitoria-Neural     # voz da Twilio nas ligações
