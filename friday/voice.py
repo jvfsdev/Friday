@@ -30,6 +30,13 @@ CHUNK = 1280  # 80 ms — tamanho que o openWakeWord espera
 
 BEEP_FILE = ROOT / "state" / "wake_beep.wav"
 
+# Calibração passiva: toda vez que ele acorda — ou QUASE acorda — guarda a
+# nota e os 2 s de áudio. É com isso que se ajusta o limiar e se retreina
+# a palavra com a voz, o microfone e a sala de verdade (scripts/palavra/).
+CALIBRACAO = ROOT / "state" / "calibracao"
+NOTA_MINIMA = 0.25
+GUARDAR_NO_MAXIMO = 300
+
 
 def _ensure_beep():
     """Gera uma vez um bipe curto de confirmação (440->660Hz, 160ms)."""
@@ -67,6 +74,9 @@ class VoiceLoop:
         self.silence_seconds = float(s.get("silence_seconds", 0.9))
         self.max_utterance = float(s.get("max_utterance_seconds", 15))
         self.input_device = s.get("input_device")  # None = padrão do sistema
+        # Palavra própria (treinada com scripts/palavra/): caminho do .onnx.
+        # Sem ela, o modelo pronto "hey jarvis" do openWakeWord.
+        self.wake_model = s.get("wake_model") or ""
 
     def _set(self, state: str, caption: str | None = None):
         log.info("estado de voz: %s", state)
@@ -88,8 +98,21 @@ class VoiceLoop:
 
         import openwakeword
 
-        openwakeword.utils.download_models(["hey_jarvis"])
-        wake = WakeModel(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+        from pathlib import Path
+
+        from .config import ROOT
+
+        proprio = (ROOT / self.wake_model) if self.wake_model else None
+        if proprio and proprio.exists():
+            openwakeword.utils.download_models([])      # só os modelos de áudio de base
+            wake = WakeModel(wakeword_models=[str(proprio)], inference_framework="onnx")
+            chave, falada = proprio.stem, f"modelo próprio {proprio.name}"
+        else:
+            if proprio:
+                log.warning("wake_model %s não existe — voltando para 'hey jarvis'", proprio)
+            openwakeword.utils.download_models(["hey_jarvis"])
+            wake = WakeModel(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+            chave, falada = "hey_jarvis", "hey jarvis"
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
 
@@ -107,8 +130,12 @@ class VoiceLoop:
         from . import tts
 
         await tts.warmup()  # paga import e handshake antes da 1a conversa
-        log.info("ouvindo a sala (wake word: hey jarvis)")
+        log.info("ouvindo a sala (palavra de ativação: %s, limiar %.2f)", falada, self.wake_threshold)
         piso_ruido = 0.0  # média móvel do RMS ambiente, medida em repouso
+        from collections import deque
+
+        anteriores: deque = deque(maxlen=int(2.5 * RATE / CHUNK))   # últimos 2,5 s
+        ultimo_registro = 0.0
         with stream:
             self._set("idle")
             while True:
@@ -116,8 +143,15 @@ class VoiceLoop:
                 dados = np.frombuffer(chunk, dtype=np.int16)
                 rms = float(np.sqrt(np.mean(dados.astype(np.float64) ** 2)))
                 piso_ruido = rms if piso_ruido == 0 else 0.97 * piso_ruido + 0.03 * rms
+                anteriores.append(dados)
                 scores = wake.predict(dados)
-                if scores.get("hey_jarvis", 0) < self.wake_threshold:
+                nota = float(scores.get(chave, 0))
+                if nota >= NOTA_MINIMA and time.monotonic() - ultimo_registro > 2.0:
+                    ultimo_registro = time.monotonic()
+                    asyncio.get_running_loop().run_in_executor(
+                        None, _registrar, np.concatenate(list(anteriores)), nota,
+                        nota >= self.wake_threshold)
+                if nota < self.wake_threshold:
                     continue
 
                 wake.reset()
@@ -195,3 +229,20 @@ class VoiceLoop:
     def _drain(queue):
         while not queue.empty():
             queue.get_nowait()
+
+
+def _registrar(audio, nota: float, acordou: bool):
+    """Guarda um quase-acordar/acordar para calibração (nunca derruba a voz)."""
+    try:
+        CALIBRACAO.mkdir(parents=True, exist_ok=True)
+        nome = f"{time.strftime('%Y%m%d-%H%M%S')}_{nota:.2f}_{'acordou' if acordou else 'quase'}.wav"
+        with wave.open(str(CALIBRACAO / nome), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(RATE)
+            w.writeframes(audio.tobytes())
+        antigos = sorted(CALIBRACAO.glob("*.wav"))
+        for velho in antigos[:-GUARDAR_NO_MAXIMO]:
+            velho.unlink(missing_ok=True)
+    except Exception:
+        log.exception("não consegui guardar o áudio de calibração")

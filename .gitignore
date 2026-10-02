@@ -10,3 +10,5 @@ config.yaml
 # Lixo do macOS e artefatos de build
 .DS_Store
 *.egg-info/
+.venv-treino/
+treino-dados/

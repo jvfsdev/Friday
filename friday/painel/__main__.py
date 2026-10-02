@@ -26,6 +26,7 @@ from . import arquivos, integracoes
 from .contas import Contas, nome_ok
 from .seguranca import COOKIE, DURACAO_SESSAO, Guarda, endereco_permitido
 from .visual import e, pagina
+from .voz import Calibracao
 
 log = logging.getLogger("guara.painel")
 
@@ -154,6 +155,7 @@ async def inicio(request):
     linhas.append(linha("/microsoft", "Contas Microsoft", "Outlook e Hotmail." + (f" {len(m)} conectada(s)." if m else ""), bool(m)))
     linhas += [linha(f"/c/{i.id}", i.nome, i.resumo, integracoes.configurada(i, env))
                for i in integracoes.INTEGRACOES if not i.essencial]
+    linhas.append(linha("/voz", "Palavra de ativação", "Ajuste para a sua voz e a sua sala.", True))
     linhas.append(linha("/preferencias", "Preferências", "Fuso horário e horário de silêncio.", True))
 
     if no_ar:
@@ -456,6 +458,66 @@ async def preferencias(request):
     return tela(request, "Preferências", corpo, aviso=aviso, aviso_ruim=ruim)
 
 
+# ================================================================ palavra de ativação
+async def voz(request):
+    cal: Calibracao = request.app["calibracao"]
+    cfg = arquivos.ler_config(CONFIG).get("voice") or {}
+    atual = float(cfg.get("wake_threshold", 0.5))
+    modelo = cfg.get("wake_model") or "hey jarvis (padrão)"
+    trechos = cal.trechos()
+    sug = cal.sugerir(atual)
+    corpo = (f'<h1>Palavra de ativação</h1><p class="sub">Modelo: <b>{e(modelo)}</b> · limiar atual <b>{atual:.2f}</b>. '
+             'Toda vez que ele acorda — ou quase — guarda os 2 s de áudio aqui, só neste aparelho. '
+             'Ouça e diga se era você chamando: é assim que ele aprende a sua sala.</p>')
+    if sug:
+        corpo += (f'<div class="aviso bom">Pelas suas marcações, o melhor limiar é <b>{sug["limiar"]:.2f}</b>: '
+                  f'acorda em {sug["acertos"]} de {sug["chamadas"]} chamadas suas e em {sug["falsos"]} '
+                  f'de {sug["nao_marcados"]} sons que não eram você.'
+                  f'<form method="post" action="/voz/limiar" style="margin-top:10px">'
+                  f'<input type="hidden" name="limiar" value="{sug["limiar"]:.2f}">'
+                  f'<button class="quente">Usar {sug["limiar"]:.2f}</button></form></div>')
+    else:
+        corpo += ('<div class="aviso ruim">Chame ele umas 10 vezes, do jeito que você fala no dia a dia, '
+                  'e marque abaixo. Com 3 chamadas marcadas já dá para sugerir um limiar.</div>')
+    if not trechos:
+        corpo += '<p class="vazio">Nada gravado ainda.</p>'
+    for t in trechos:
+        selo = '<span class="selo ok">ACORDOU</span>' if t["acordou"] else '<span class="selo nao">QUASE</span>'
+        botoes = "".join(
+            f'<button name="rotulo" value="{v}" class="{"" if t["rotulo"] == v else "leve"}">{r}</button>'
+            for v, r in (("eu", "Era eu"), ("nao", "Não era")))
+        corpo += (f'<div class="linha" style="flex-wrap:wrap"><span class="x"><span class="t">{t["nota"]:.2f}</span> '
+                  f'<span class="d">{e(t["quando"])}</span></span>{selo}'
+                  f'<audio controls preload="none" src="/voz/audio/{e(t["arquivo"])}" style="width:100%"></audio>'
+                  f'<form method="post" action="/voz/rotular" class="botoes" style="margin-top:6px">'
+                  f'<input type="hidden" name="arquivo" value="{e(t["arquivo"])}">{botoes}</form></div>')
+    return tela(request, "Palavra de ativação", corpo)
+
+
+async def voz_rotular(request):
+    f = await request.post()
+    request.app["calibracao"].rotular(f.get("arquivo", ""), f.get("rotulo", ""))
+    raise web.HTTPSeeOther("/voz")
+
+
+async def voz_audio(request):
+    arq = request.app["calibracao"].caminho(request.match_info["arquivo"])
+    if not arq:
+        raise web.HTTPNotFound()
+    return web.FileResponse(arq, headers={"Content-Type": "audio/wav", "Cache-Control": "no-store"})
+
+
+async def voz_limiar(request):
+    try:
+        limiar = round(float((await request.post()).get("limiar", "")), 2)
+    except ValueError:
+        raise web.HTTPSeeOther("/voz")
+    if 0.1 <= limiar <= 0.99:
+        arquivos.gravar_config(CONFIG, lambda d: d.setdefault("voice", {}).__setitem__("wake_threshold", limiar))
+        request.app[REINICIAR] = True
+    raise web.HTTPSeeOther("/voz")
+
+
 # ================================================================ app
 async def fonte(request):
     nome = request.match_info["nome"]
@@ -469,6 +531,7 @@ def criar_app() -> web.Application:
     app = web.Application(middlewares=[porteiro], client_max_size=300_000)
     app["guarda"] = Guarda(ESTADO / "painel.json")
     app["contas"] = Contas(ESTADO)
+    app["calibracao"] = Calibracao(ESTADO / "calibracao")
     app.add_routes([
         web.route("*", "/primeiro-acesso", primeiro_acesso),
         web.route("*", "/entrar", entrar),
@@ -487,6 +550,10 @@ def criar_app() -> web.Application:
         web.get("/microsoft/espera", microsoft_espera),
         web.post("/microsoft/remover", microsoft_remover),
         web.route("*", "/preferencias", preferencias),
+        web.get("/voz", voz),
+        web.post("/voz/rotular", voz_rotular),
+        web.get("/voz/audio/{arquivo}", voz_audio),
+        web.post("/voz/limiar", voz_limiar),
         web.get("/fontes/{nome}", fonte),
     ])
     return app

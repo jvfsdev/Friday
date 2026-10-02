@@ -21,6 +21,7 @@ quiet_hours:
 voice:
   enabled: true
   wake_threshold: 0.5          # sensibilidade da wake word (0-1)
+  # wake_model: modelos/guara.onnx   # palavra própria (scripts/palavra/); sem isto, "hey jarvis"
   silence_seconds: 0.9         # silêncio que encerra a fala
   # Motor de voz: auto (nuvem, cai para espeak sem internet) | edge | espeak | piper
   # No servidor antigo: edge ~1,4s por frase, espeak ~0,2s, piper ~13s (inviável)
