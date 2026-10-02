@@ -36,7 +36,7 @@ face = ["pygame>=2.1"]
 mcp = ["mcp>=1.2,<2"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]   # 77+: entende `license = "MIT"`
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
