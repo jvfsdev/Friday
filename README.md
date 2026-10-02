@@ -1,9 +1,10 @@
-# Projeto Friday 🤖
+# Guará
 
 Assistente pessoal auto-hospedado — ele atende por **Guará**: sarcástico, caloroso e direto (persona em `GUARA.md`, identidade visual em `docs/identidade-visual.md`).
 
 > A palavra de ativação da voz ainda é **"hey Jarvis"**: é o modelo pronto do openWakeWord. O "Ô, Guará" depende de treinar um modelo próprio — é o próximo passo do projeto.
 
+- **Configura pelo navegador**: um painel leve (`http://<servidor>:8080`, só na rede de casa e no Tailscale) conecta Gemini, Telegram, contas Google e Microsoft, Home Assistant, Notion, Open Finance e Twilio — com guia passo a passo e botão de testar. Nada de editar arquivo na mão.
 - **Cérebro**: Gemini Flash (API gratuita) com function calling
 - **Interface**: bot no Telegram (só responde ao dono) + modo `--cli` para testes
 - **Mora em**: um servidor Linux, como serviço systemd 24/7

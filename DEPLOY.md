@@ -51,6 +51,28 @@ mesmo bot brigam pelas mensagens — erro "Conflict" no log).
 Verificar: `systemctl status friday` e `journalctl -u friday -f`.
 Teste do celular: mande uma mensagem no Telegram.
 
+## 3b. Painel de configuração (o jeito fácil)
+
+Um site leve, servido pelo próprio notebook, para configurar tudo sem
+terminal: chaves, contas Google e Microsoft, casa, finanças e preferências.
+
+```bash
+sudo apt install -y fonts-inter        # a fonte da identidade (opcional)
+sudo cp deploy/guara-painel.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now guara-painel
+```
+
+Abra `http://<ip-do-servidor>:8080` no celular ou no computador, **na rede
+de casa ou pelo Tailscale** — de fora ele recusa qualquer acesso, de
+propósito: é ali que moram as chaves de todas as contas. No primeiro acesso
+você cria a senha do painel.
+
+Cada item tem um guia em passos e um botão **Testar**, que fala com o serviço
+de verdade. Ao salvar, aparece a faixa "Reinicie o Guará" — um toque e ele
+volta em ~30 s. Esqueceu a senha? Apague `state/painel.json` e crie outra.
+
+As seções abaixo continuam valendo para quem prefere o terminal.
+
 ## 4. Manutenção do dia a dia
 
 ```bash

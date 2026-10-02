@@ -1,0 +1,25 @@
+# Painel web de configuração do Guará (python -m friday.painel), porta 8080.
+# Só responde à rede de casa e ao Tailscale. Instalação no servidor:
+#   sudo cp deploy/guara-painel.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now guara-painel
+# Roda separado do Guará de propósito: numa instalação nova, o Guará não
+# sobe sem as chaves — e é o painel quem as configura.
+
+[Unit]
+Description=Guará - painel de configuração
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jarvis
+WorkingDirectory=/home/jarvis/Friday
+ExecStart=/home/jarvis/Friday/.venv/bin/python -m friday.painel
+Restart=always
+RestartSec=5
+# leve de propósito: o notebook velho divide a CPU com o Guará e o rosto
+Nice=5
+MemoryMax=150M
+
+[Install]
+WantedBy=multi-user.target
