@@ -24,7 +24,8 @@ voice:
   # quadros seguidos que o treino escolheu. Só preencha para mudar:
   # wake_model: modelos/outro.onnx   # treine o seu com scripts/palavra/
   # wake_threshold: 0.85             # mais alto = acorda menos (o painel sugere)
-  # wake_seguidos: 3
+  # wake_seguidos: 2
+  # ganho_mic: 30                   # mic de notebook capta baixo: amplifica só para o detector
   silence_seconds: 0.9         # silêncio que encerra a fala
   # Motor de voz: auto (nuvem, cai para espeak sem internet) | edge | espeak | piper
   # No servidor antigo: edge ~1,4s por frase, espeak ~0,2s, piper ~13s (inviável)

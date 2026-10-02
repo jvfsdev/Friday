@@ -1,6 +1,6 @@
 {
-  "limiar": 0.85,
-  "seguidos": 3,
+  "limiar": 0.6,
+  "seguidos": 2,
   "escolhido": {
     "seguidos": 3,
     "limiar": 0.95,
@@ -490,5 +490,5 @@
   "horas_de_prova": 1.85,
   "minutos": 9.0,
   "limiar_do_treino": 0.95,
-  "por_que": "0.95 e 0.85 empatam em falsos/h com 3 quadros seguidos (2,7/h); 0.85 acerta mais em sala ruidosa (75% x 73%)."
+  "por_que": "Ajustado com a 1a gravação real (mic de notebook, ~9 chamadas): 3 quadros seguidos pegava só metade das chamadas reais, mais curtas que as sintéticas; 2 quadros + limiar 0,6 pegou todas. O VAD (0,3) e o ganho do mic seguram os falsos de música/ruído."
 }

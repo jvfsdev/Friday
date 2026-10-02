@@ -96,6 +96,11 @@ class VoiceLoop:
         # e música dão picos de um quadro; a palavra dura vários. O treino
         # (scripts/palavra/treinar.py) diz qual valor usar junto com o limiar.
         self.wake_seguidos = max(1, int(s.get("wake_seguidos") or relatorio.get("seguidos", 1)))
+        # Microfone de notebook capta baixo: a voz chega ~3x acima do ruído, e o
+        # detector de voz humana (VAD) não acredita que aquilo é gente — zera a
+        # nota. O ganho só amplifica o que vai para o detector; o áudio enviado
+        # ao modelo de linguagem continua o original.
+        self.ganho_mic = float(s.get("ganho_mic", 1))
 
     def _set(self, state: str, caption: str | None = None):
         log.info("estado de voz: %s", state)
@@ -128,7 +133,7 @@ class VoiceLoop:
             # quando não há fala — corta os disparos com música e ruído, que
             # são a maior parte dos que um modelo treinado em casa ainda tem.
             wake = WakeModel(wakeword_models=[str(proprio)], inference_framework="onnx",
-                             vad_threshold=float(self.config.voice_settings.get("wake_vad", 0.5)))
+                             vad_threshold=float(self.config.voice_settings.get("wake_vad", 0.3)))
             chave, falada = proprio.stem, f"modelo próprio {proprio.name}"
         else:
             if proprio:
@@ -153,8 +158,8 @@ class VoiceLoop:
         from . import tts
 
         await tts.warmup()  # paga import e handshake antes da 1a conversa
-        log.info("ouvindo a sala (palavra de ativação: %s, limiar %.2f, %d quadro(s) seguidos)",
-                 falada, self.wake_threshold, self.wake_seguidos)
+        log.info("ouvindo a sala (palavra de ativação: %s, limiar %.2f, %d quadro(s) seguidos, ganho %gx)",
+                 falada, self.wake_threshold, self.wake_seguidos, self.ganho_mic)
         piso_ruido = 0.0  # média móvel do RMS ambiente, medida em repouso
         from collections import deque
 
@@ -168,6 +173,8 @@ class VoiceLoop:
                 dados = np.frombuffer(chunk, dtype=np.int16)
                 rms = float(np.sqrt(np.mean(dados.astype(np.float64) ** 2)))
                 piso_ruido = rms if piso_ruido == 0 else 0.97 * piso_ruido + 0.03 * rms
+                if self.ganho_mic != 1:
+                    dados = np.clip(dados.astype(np.float32) * self.ganho_mic, -32767, 32767).astype(np.int16)
                 anteriores.append(dados)
                 scores = wake.predict(dados)
                 nota = float(scores.get(chave, 0))
